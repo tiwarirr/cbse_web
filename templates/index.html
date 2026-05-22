@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBSE Result Dashboard</title>
+<script src="/static/js/chart.umd.min.js"></script>
+<script src="/static/js/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/static/css/fonts.css">
+<link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="hbrand">
+    <div class="hlogo">S</div>
+    <div>
+      <div class="htitle">CBSE Result Dashboard</div>
+      <div class="hsub" id="hschool">CBSE School Result Analyser</div>
+    </div>
+  </div>
+  <div class="hright">
+    <div class="hmeta" id="hmeta">Upload result files to begin</div>
+    <button class="btn-restore-json" id="btn-add-school" onclick="showUploadScreen()" style="display:none">Add School</button>
+    <button class="btn-backup" id="btn-backup" onclick="exportBackup()" style="display:none">Backup</button>
+    <button class="btn-restore-json" id="btn-restore-json" onclick="document.getElementById('import-file-input').click()">Restore Backup</button>
+    <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="handleImportFile(event)">
+    <button class="btn-clear" id="btn-clear" onclick="clearSavedData()" style="display:none">Clear Saved</button>
+    <button class="btn-export" id="btn-export" onclick="exportExcel()">Export Excel</button>
+  </div>
+</header>
+
+<div id="import-overlay">
+  <div id="import-box">
+    <h2 id="import-title">Restore Data</h2>
+    <p id="import-desc">Select a saved session to restore.</p>
+    <div id="import-sessions"></div>
+    <div class="import-actions">
+      <button class="import-btn-cancel" onclick="closeImportOverlay()">Cancel</button>
+      <button class="import-btn-load" id="import-btn-load" onclick="doImport()" disabled>Load Selected</button>
+    </div>
+  </div>
+</div>
+
+<div class="restore-banner" id="restore-banner">
+  <span id="restore-msg">Data restored from saved session</span>
+  <button onclick="document.getElementById('restore-banner').classList.remove('show')">Dismiss</button>
+</div>
+
+<div class="parse-banner" id="parse-banner">
+  <div class="parse-banner-inner">
+    <div class="parse-banner-title">Parse warnings detected</div>
+    <div class="parse-banner-body" id="parse-banner-body"></div>
+  </div>
+</div>
+
+<div class="mixed-year-banner" id="mixed-year-banner">
+  <div class="parse-banner-inner">
+    <div class="parse-banner-title">Mixed Year Comparison</div>
+    <div class="parse-banner-body">Selected schools belong to multiple exam years. Merit and comparison results may be less comparable.</div>
+  </div>
+</div>
+
+<div id="upload-screen">
+  <div class="upload-hero">
+    <h1>CBSE Gazette<br><em style="color:var(--gold-dk)">Result Analyser</em></h1>
+    <p>Upload Class X and / or Class XII gazette <code>.TXT</code> files.<br>
+    Both classes are kept <strong>fully separate</strong> throughout.<br>
+    Everything runs locally in your browser - no data is uploaded.</p>
+  </div>
+  <div class="upload-grid">
+    <div class="upload-card" id="card-X"
+      ondragover="dragOver(event,'X')" ondragleave="dragLeave(event,'X')" ondrop="fileDrop(event,'X')">
+      <input type="file" accept=".txt,.TXT" onchange="handleFile(event,'X')">
+      <span class="upload-icon">X</span>
+      <div class="upload-label">Class X</div>
+      <div class="upload-hint">Secondary Examination<br>Gazette TXT file</div>
+      <div class="upload-status" id="status-X"></div>
+    </div>
+    <div class="upload-card" id="card-XII"
+      ondragover="dragOver(event,'XII')" ondragleave="dragLeave(event,'XII')" ondrop="fileDrop(event,'XII')">
+      <input type="file" accept=".txt,.TXT" onchange="handleFile(event,'XII')">
+      <span class="upload-icon">XII</span>
+      <div class="upload-label">Class XII</div>
+      <div class="upload-hint">Senior School Certificate<br>Gazette TXT file</div>
+      <div class="upload-status" id="status-XII"></div>
+    </div>
+  </div>
+  <div class="upload-actions">
+    <button class="btn-analyze" id="btn-analyze" onclick="runAnalysis()" disabled>Analyse Results</button>
+    <button class="btn-clear upload-cancel" id="btn-upload-cancel" onclick="hideUploadScreen()" style="display:none">Cancel</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <input type="file" id="student-master-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleMasterFile(event,'student')">
+  <input type="file" id="teacher-mapping-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleMasterFile(event,'teacher')">
+  <input type="file" id="performance-marks-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleMasterFile(event,'performance')">
+  <div class="workspace-panel">
+    <div class="workspace-top">
+      <div>
+        <div class="workspace-title">Multischool Workspace</div>
+        <div class="workspace-sub" id="workspace-sub">Upload or restore schools to start a multischool workspace.</div>
+        <div class="storage-indicator" id="storage-indicator">
+          <div class="storage-label-row">
+            <span class="storage-label">Local Storage</span>
+            <span class="storage-value" id="storage-value">Checking...</span>
+          </div>
+          <div class="storage-bar">
+            <div class="storage-fill" id="storage-fill"></div>
+          </div>
+        </div>
+      </div>
+      <div class="workspace-actions">
+        <button class="btn-restore-json workspace-btn" onclick="document.getElementById('student-master-input').click()" style="display:inline-block">Upload Student Master</button>
+        <button class="btn-restore-json workspace-btn" onclick="document.getElementById('teacher-mapping-input').click()" style="display:inline-block">Upload Teacher Mapping</button>
+        <div class="workspace-inline-field">
+          <label for="performance-component-type">Performance Basis Upload</label>
+          <select id="performance-component-type" class="workspace-select">
+            <option value="internal">Internal Marks</option>
+            <option value="practical">Practical Marks</option>
+          </select>
+        </div>
+        <button class="btn-restore-json workspace-btn" onclick="document.getElementById('performance-marks-input').click()" style="display:inline-block">Upload Internal / Practical Marks</button>
+        <button class="btn-export workspace-btn" onclick="promptSaveCombination()" style="display:inline-block">Save Combination</button>
+        <div class="template-links">
+          <a class="template-link" href="student_master_template.xlsx" download>Student Master Excel Example</a>
+          <a class="template-link" href="teacher_mapping_template.xlsx" download>Teacher Mapping Excel Example</a>
+          <a class="template-link" href="performance_marks_template.xlsx" download>Internal / Practical Marks Excel Example</a>
+        </div>
+      </div>
+    </div>
+    <div class="workspace-filters">
+      <div class="workspace-field">
+        <label for="workspace-mode">View Mode</label>
+        <select id="workspace-mode" class="sselect" onchange="onWorkspaceModeChange()">
+          <option value="single">Single School</option>
+          <option value="multi">Multi-School</option>
+        </select>
+      </div>
+      <div class="workspace-field">
+        <label for="compare-year">Year</label>
+        <select id="compare-year" class="sselect" onchange="onWorkspaceFilterChange()">
+          <option value="all">All Years</option>
+        </select>
+      </div>
+      <div class="workspace-field">
+        <label for="compare-class">Class Scope</label>
+        <select id="compare-class" class="sselect" onchange="onWorkspaceFilterChange()">
+          <option value="X">Class X</option>
+          <option value="XII">Class XII</option>
+          <option value="all">All Classes</option>
+        </select>
+      </div>
+      <div class="workspace-field">
+        <label for="compare-merit-scope">Merit Scope</label>
+        <select id="compare-merit-scope" class="sselect" onchange="onWorkspaceFilterChange()">
+          <option value="same-class">Same Class</option>
+          <option value="all-classes">All Classes</option>
+        </select>
+      </div>
+    </div>
+    <div class="workspace-grid">
+      <div class="workspace-block">
+        <div class="workspace-block-title">Schools</div>
+        <div id="session-list" class="workspace-list"></div>
+      </div>
+      <div class="workspace-block">
+        <div class="workspace-block-title">Saved Combinations</div>
+        <div id="combination-list" class="workspace-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="class-tabs" id="class-tabs"></div>
+
+  <div class="sec-tabs">
+    <button class="stab active" onclick="showSec('summary',this)">Summary</button>
+    <button class="stab" onclick="showSec('subjects',this)">Subjects</button>
+    <button class="stab" onclick="showSec('merit',this)">Merit List</button>
+    <button class="stab" onclick="showSec('gender',this)">Gender</button>
+    <button class="stab" onclick="showSec('students',this)">All Students</button>
+    <button class="stab" onclick="showSec('sections',this)">Section Review</button>
+    <button class="stab" onclick="showSec('teachers',this)">Teacher Review</button>
+    <button class="stab" onclick="showSec('followup',this)">Follow-Up</button>
+  </div>
+
+  <div class="sec-tabs-mobile">
+    <select id="sec-select-mobile" onchange="showSec(this.value,null)">
+      <option value="summary">Summary</option>
+      <option value="subjects">Subjects</option>
+      <option value="merit">Merit List</option>
+      <option value="gender">Gender</option>
+      <option value="students">All Students</option>
+      <option value="sections">Section Review</option>
+      <option value="teachers">Teacher Review</option>
+      <option value="followup">Follow-Up</option>
+    </select>
+  </div>
+
+  <div class="content">
+    <div class="sec-panel active" id="sec-summary"><div id="d-summary"></div></div>
+    <div class="sec-panel" id="sec-subjects"><div id="d-subjects"></div></div>
+    <div class="sec-panel" id="sec-merit"><div id="d-merit"></div></div>
+    <div class="sec-panel" id="sec-gender"><div id="d-gender"></div></div>
+    <div class="sec-panel" id="sec-students"><div id="d-students"></div></div>
+    <div class="sec-panel" id="sec-sections"><div id="d-sections"></div></div>
+    <div class="sec-panel" id="sec-teachers"><div id="d-teachers"></div></div>
+    <div class="sec-panel" id="sec-followup"><div id="d-followup"></div></div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
