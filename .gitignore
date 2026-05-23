@@ -1,0 +1,19 @@
+# SQLite database — server-side only, never commit
+data/
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+
+# Local school data files — keep out of public repo
+static/mappings/604782026*.xlsx
