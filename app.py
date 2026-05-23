@@ -56,9 +56,19 @@ def serve_mapping(filename):
 
 @app.route('/api/sessions', methods=['GET'])
 def api_list_sessions():
-    """Return list of saved sessions (no raw text — just metadata)."""
+    """Return list of saved sessions including raw text (needed by JS Store.loadAllSessions)."""
     sessions = db.list_sessions()
-    return jsonify(sessions)
+    # Normalise key names to camelCase for JS
+    return jsonify([
+        {
+            'schoolCode': s['school_code'],
+            'schoolName': s['school_name'] or '',
+            'year':       s['year'],
+            'cls':        s['cls'],
+            'rawText':    s['raw_text'],
+        }
+        for s in sessions
+    ])
 
 
 @app.route('/api/sessions', methods=['POST'])

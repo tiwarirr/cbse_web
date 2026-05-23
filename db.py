@@ -107,7 +107,7 @@ def save_session(school_code, school_name, year, cls, raw_text):
 def list_sessions():
     conn = get_db()
     rows = conn.execute(
-        'SELECT school_code, school_name, year, cls FROM sessions ORDER BY year DESC, school_code'
+        'SELECT school_code, school_name, year, cls, raw_text FROM sessions ORDER BY year DESC, school_code'
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
