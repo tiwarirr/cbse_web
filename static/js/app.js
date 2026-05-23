@@ -260,13 +260,45 @@ const Store = {
     }
   },
 
+  async savePerformanceMarks(session, rows, componentType){
+    if(this.mode === 'api'){
+      try {
+        const r = await fetch(`/api/performance/${session.schoolCode}/${session.year}`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({rows, componentType}),
+        });
+        const data = await r.json();
+        console.log('[CBSE save] savePerformanceMarks status='+r.status+' rows='+rows.length, data);
+      } catch(err) {
+        console.error('[CBSE save] savePerformanceMarks FAILED', err);
+      }
+    }
+  },
+
+  async loadPerformanceMarks(session){
+    if(this.mode === 'api'){
+      try {
+        const r = await fetch(`/api/performance/${session.schoolCode}/${session.year}`);
+        if(r.ok) return await r.json();  // {rows, componentType}
+      } catch {}
+    }
+    return {rows:[], componentType:null};
+  },
+
   async saveMasterRows(session, type, rows){
     if(this.mode === 'api'){
-      await fetch(`/api/master/${session.schoolCode}/${session.year}/${type}`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(rows),
-      });
+      try {
+        const r = await fetch(`/api/master/${session.schoolCode}/${session.year}/${type}`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(rows),
+        });
+        const data = await r.json();
+        console.log('[CBSE save] saveMasterRows', type, 'status='+r.status, 'schoolCode='+session.schoolCode, 'year='+session.year, 'rows='+rows.length, 'response='+JSON.stringify(data));
+      } catch(err) {
+        console.error('[CBSE save] saveMasterRows FAILED', type, err);
+      }
     }
   },
 
@@ -297,11 +329,35 @@ function subjectIsAbsent(subject){
 function subjectIsFail(subject){
   if(subjectIsAbsent(subject)) return false;
   if(subject.grade === 'E') return true;
-  return subject.grade === 'NA' && subject.marks < 33;
+  // Grade-NA fallback: gazette files without explicit grades
+  return subject.grade === 'NA' && subject.marks < cbsePassMarkForSubject(subject);
 }
 
 function subjectIsPass(subject){
   return !subjectIsAbsent(subject) && !subjectIsFail(subject);
+}
+/* ── CBSE pass-mark calculation ─────────────────────────────
+   CBSE rule: passing threshold = Math.round(maxMarks * 0.33)
+   Verified official values:
+     100 marks → 33,  80 marks → 26,  70 marks → 23
+      50 marks → 17,  30 marks → 10,  20 marks →  7
+   Note: for gazette analysis the grade (E / D2 etc.) is
+   authoritative — this function is only used as a fallback
+   for rare gazette files that carry marks but no grade codes,
+   and for the performance-upload component analysis.
+─────────────────────────────────────────────────────────── */
+function cbsePassMark(maxMarks){
+  // Math.round matches all known official CBSE thresholds
+  return Math.round((maxMarks || 100) * 0.33);
+}
+
+function cbsePassMarkForSubject(subject){
+  // Use componentMaxMarks if available (theory/practical split),
+  // otherwise assume the gazette mark is out of 100.
+  if(Number.isFinite(subject.theoryMaxMarks) && subject.theoryMaxMarks > 0){
+    return cbsePassMark(subject.theoryMaxMarks);
+  }
+  return cbsePassMark(100);  // gazette total mark is always out of 100
 }
 
 function createEmptyMasterData(){
@@ -509,7 +565,7 @@ function inferMissingGrade(code, rawMark, marks, result, compSub){
   if(rawMark === 'AB') return 'AB';
   const compCodes = String(compSub || '').match(/\d{3}/g) || [];
   if(compCodes.includes(code)) return 'E';
-  if(result === 'FAIL' && marks < 33) return 'E';
+  if(result === 'FAIL' && marks < cbsePassMark(100)) return 'E';
   return 'NA';
 }
 
@@ -673,10 +729,19 @@ function buildSessionFromRawClasses(classes){
 function mergeSessionIntoRegistry(session){
   const existing = schoolSessions[session.sessionId];
   if(existing){
+    // Preserve existing masterData rows unless the incoming session has actual data.
+    // createEmptyMasterData() is an object (truthy) but has no rows — don't let it
+    // silently wipe rows that were already loaded from the server.
+    const incomingHasRows = session.masterData &&
+      (session.masterData.studentMaster?.length || session.masterData.teacherMappings?.length ||
+       Object.keys(session.masterData.followUps || {}).length);
+    const resolvedMasterData = incomingHasRows
+      ? session.masterData
+      : (existing.masterData || createEmptyMasterData());
     schoolSessions[session.sessionId] = {
       ...existing,
       schoolName: session.schoolName || existing.schoolName,
-      masterData: session.masterData || existing.masterData || createEmptyMasterData(),
+      masterData: resolvedMasterData,
       parsed: {
         X: session.classes.X ? session.classes.X.students.length : (existing.classes.X ? existing.classes.X.students.length : 0),
         XII: session.classes.XII ? session.classes.XII.students.length : (existing.classes.XII ? existing.classes.XII.students.length : 0),
@@ -729,15 +794,16 @@ function collectSavedCombinations(){
   } catch { return []; }
 }
 
-function persistSavedCombinations(){
-  Store.saveCombinations(savedCombinations);
+async function persistSavedCombinations(){
+  await Store.saveCombinations(savedCombinations);
 }
 
-function persistSchoolSession(session){
-  Store.saveSession(session);
+async function persistSchoolSession(session){
+  await Store.saveSession(session);
 }
 
 function loadSessionMasterData(session){
+  // Sync path: read whatever is in localStorage (legacy backwards compat)
   const fallback = createEmptyMasterData();
   try {
     const studentMaster = JSON.parse(localStorage.getItem(getSessionStorageKey(session, STUDENT_MASTER_SUFFIX)) || '[]');
@@ -745,8 +811,6 @@ function loadSessionMasterData(session){
     const followUps = JSON.parse(localStorage.getItem(getSessionStorageKey(session, FOLLOW_UP_SUFFIX)) || '{}');
     const loaded = {
       ...fallback,
-      // Backward compatibility: older versions persisted mapping rows in localStorage.
-      // New saves keep these memory-only and reload from same-folder Excel files.
       studentMaster: Array.isArray(studentMaster) ? studentMaster : [],
       teacherMappings: Array.isArray(teacherMappings) ? teacherMappings : [],
       followUps: followUps && typeof followUps === 'object' ? followUps : {},
@@ -759,13 +823,62 @@ function loadSessionMasterData(session){
   }
 }
 
-function persistMasterData(session){
-  Store.saveFollowUps(session);
+async function loadSessionMasterDataFromServer(session){
+  // Async path: load master rows saved via manual upload from SQLite API.
+  // Called after rebuildSessionsFromLocalStorage completes.
+  console.log('[CBSE restore] loadSessionMasterDataFromServer called, mode='+Store.mode+' sessionId='+session.sessionId);
+  if(Store.mode !== 'api') { console.log('[CBSE restore] skipped — not api mode'); return; }
+  const masterData = session.masterData || createEmptyMasterData();
+
+  const [studentRows, teacherRows, followUps, perfData] = await Promise.all([
+    Store.loadMasterRows(session, 'student'),
+    Store.loadMasterRows(session, 'teacher'),
+    Store.loadFollowUps(session),
+    Store.loadPerformanceMarks(session),
+  ]);
+
+  console.log('[CBSE restore] studentRows='+studentRows.length+' teacherRows='+teacherRows.length+' followUps='+Object.keys(followUps).length+' perfRows='+perfData.rows.length);
+
+  if(studentRows.length){
+    masterData.studentMaster = studentRows;
+    masterData.mappingFiles.studentMaster = {
+      status: 'manual',
+      fileName: 'server (uploaded mapping)',
+      expected: getMappingFileCandidates(session, 'student'),
+    };
+  }
+  if(teacherRows.length){
+    masterData.teacherMappings = teacherRows;
+    masterData.mappingFiles.teacherMappings = {
+      status: 'manual',
+      fileName: 'server (uploaded mapping)',
+      expected: getMappingFileCandidates(session, 'teacher'),
+    };
+  }
+  if(Object.keys(followUps).length){
+    masterData.followUps = followUps;
+  }
+  if(perfData.rows.length && perfData.componentType){
+    // Re-apply performance rows to enrich subject records
+    applyPerformanceRows(session, perfData.rows, perfData.componentType);
+    session.masterData.mappingFiles.performanceMarks = {
+      status: 'manual',
+      fileName: 'server (uploaded marks)',
+      expected: [],
+    };
+  }
+  session.masterData = masterData;
+  console.log('[CBSE restore] after assignment: studentMaster='+session.masterData.studentMaster.length+' teacherMappings='+session.masterData.teacherMappings.length);
+}
+
+async function persistMasterData(session){
+  await Store.saveFollowUps(session);
 }
 
 async function rebuildSessionsFromLocalStorage(){
   Object.keys(schoolSessions).forEach(key => delete schoolSessions[key]);
   const grouped = await Store.loadAllSessions();
+  const mergedSessions = [];
   Object.entries(grouped).forEach(([, classes]) => {
     const session = buildSessionFromRawClasses({
       X: classes.X || null,
@@ -774,8 +887,11 @@ async function rebuildSessionsFromLocalStorage(){
     // Carry over schoolName from server response if available
     if(classes.schoolName) session.schoolName = classes.schoolName;
     const merged = mergeSessionIntoRegistry(session);
-    merged.masterData = loadSessionMasterData(merged);
+    merged.masterData = loadSessionMasterData(merged);  // sync: localStorage legacy
+    mergedSessions.push(merged);
   });
+  // Async: load master rows and follow-ups from SQLite for all sessions in parallel
+  await Promise.all(mergedSessions.map(s => loadSessionMasterDataFromServer(s)));
   savedCombinations = await Store.loadCombinations();
 }
 
@@ -1094,7 +1210,13 @@ async function autoLoadMappingFile(session, type){
   const candidates = getMappingFileCandidates(session, type);
   const dataKey = type === 'student' ? 'studentMaster' : 'teacherMappings';
   const currentStatus = session.masterData?.mappingFiles?.[dataKey]?.status;
+  // Short-circuit only when rows are actually loaded in memory.
+  // 'manual' with no rows means we're after a refresh — don't skip, try server/file.
   if((currentStatus === 'loaded' || currentStatus === 'manual') && session.masterData?.[dataKey]?.length){
+    return true;
+  }
+  // If server already restored rows (loadSessionMasterDataFromServer ran first), skip file fetch.
+  if(Store.mode === 'api' && session.masterData?.[dataKey]?.length){
     return true;
   }
   setMappingFileStatus(session, type, {status:'loading', fileName:'', expected:candidates});
@@ -1137,6 +1259,16 @@ async function autoLoadPerformanceFile(session){
   if((currentStatus === 'loaded' || currentStatus === 'manual') && session.masterData?.performanceMarks?.rows?.length){
     return true;
   }
+  // In API mode, performance marks are only uploaded manually — no same-folder files to scan.
+  // Avoid firing a cascade of 404 requests on every page load.
+  if(Store.mode === 'api'){
+    setMappingFileStatus(session, 'performance', {
+      status:'missing',
+      fileName:'',
+      expected:candidates.map(item => item.fileName),
+    });
+    return false;
+  }
   setMappingFileStatus(session, 'performance', {status:'loading', fileName:'', expected:candidates.map(item => item.fileName)});
 
   for(const candidate of candidates){
@@ -1167,6 +1299,21 @@ async function autoLoadPerformanceFile(session){
 
 async function autoLoadMappingFiles(session){
   if(!session || session._mappingLoadPromise) return session?._mappingLoadPromise || Promise.resolve(false);
+
+  // If server already restored master rows (loadSessionMasterDataFromServer ran),
+  // skip the file-fetch entirely — rows are already in memory.
+  const md = session.masterData;
+  const serverRestored =
+    Store.mode === 'api' &&
+    (md?.studentMaster?.length || md?.teacherMappings?.length);
+  console.log('[CBSE restore] autoLoadMappingFiles: mode='+Store.mode+' studentMaster='+(md?.studentMaster?.length||0)+' teacherMappings='+(md?.teacherMappings?.length||0)+' serverRestored='+serverRestored);
+  if(serverRestored){
+    console.log('[CBSE restore] skipping file fetch — rows already in memory');
+    renderWorkspacePanel();
+    renderSec();
+    return true;
+  }
+
   session._mappingLoadPromise = Promise.all([
     autoLoadMappingFile(session, 'student'),
     autoLoadMappingFile(session, 'teacher'),
@@ -1240,7 +1387,7 @@ function buildEnrichedStudents(cls){
   return {students, diagnostics};
 }
 
-function handleMasterFile(e, type){
+async function handleMasterFile(e, type){
   const file = e.target.files[0];
   e.target.value = '';
   const session = getCurrentSingleSession();
@@ -1249,18 +1396,21 @@ function handleMasterFile(e, type){
     return;
   }
 
-  readWorkbookRows(file).then(rows => {
+  try {
+    const rows = await readWorkbookRows(file);
     if(type === 'student'){
       const masterData = session.masterData || createEmptyMasterData();
       masterData.studentMaster = mapStudentMasterRows(rows);
       setMappingFileStatus(session, 'student', {status:'manual', fileName:file.name, expected:getMappingFileCandidates(session, 'student')});
       session.masterData = masterData;
+      await Store.saveMasterRows(session, 'student', masterData.studentMaster);
       alert(`Student master loaded: ${masterData.studentMaster.length} valid row(s).`);
     } else if(type === 'teacher') {
       const masterData = session.masterData || createEmptyMasterData();
       masterData.teacherMappings = mapTeacherRows(rows);
       setMappingFileStatus(session, 'teacher', {status:'manual', fileName:file.name, expected:getMappingFileCandidates(session, 'teacher')});
       session.masterData = masterData;
+      await Store.saveMasterRows(session, 'teacher', masterData.teacherMappings);
       alert(`Teacher mapping loaded: ${masterData.teacherMappings.length} valid row(s).`);
     } else {
       const componentType = getSelectedPerformanceComponentType();
@@ -1268,15 +1418,16 @@ function handleMasterFile(e, type){
       const diagnostics = applyPerformanceRows(session, performanceRows, componentType);
       const label = componentType === 'practical' ? 'Practical' : 'Internal';
       setMappingFileStatus(session, 'performance', {status:'manual', fileName:file.name, expected:[]});
+      await Store.savePerformanceMarks(session, performanceRows, componentType);
       alert(`${label} marks loaded: ${diagnostics.rows} valid row(s), ${diagnostics.matched} matched subject row(s).`);
     }
     clearPersistedMappingData(session);
-    persistMasterData(session);
+    await persistMasterData(session);
     renderWorkspacePanel();
     renderSec();
-  }).catch(() => {
+  } catch {
     alert('Could not read the uploaded file. Please use CSV or Excel with header columns.');
-  });
+  }
 }
 
 function getFollowUpCategories(student){
@@ -1287,7 +1438,7 @@ function getFollowUpCategories(student){
   return {categories, weakSubjects};
 }
 
-function updateFollowUpRecord(cls, rollNo, field, value){
+async function updateFollowUpRecord(cls, rollNo, field, value){
   const session = getCurrentSingleSession();
   if(!session) return;
   const key = `${cls}|${rollNo}`;
@@ -1297,7 +1448,7 @@ function updateFollowUpRecord(cls, rollNo, field, value){
     [field]: value,
   };
   session.masterData.followUps = followUps;
-  persistMasterData(session);
+  await persistMasterData(session);
 }
 
 function renderParseWarnings(){
@@ -1335,11 +1486,11 @@ function renderParseWarnings(){
   banner.classList.add('show');
 }
 
-function runAnalysis(){
+async function runAnalysis(){
   const staged = {X: uploadRaw.X, XII: uploadRaw.XII};
   const session = buildSessionFromRawClasses(staged);
   const merged = mergeSessionIntoRegistry(session);
-  persistSchoolSession(merged);
+  await persistSchoolSession(merged);
 
   if(!workspaceState.selectedSessionIds.includes(merged.sessionId)){
     workspaceState.selectedSessionIds = [...workspaceState.selectedSessionIds, merged.sessionId];
@@ -1397,7 +1548,7 @@ async function clearSavedData(){
   savedCombinations = savedCombinations.filter(combo =>
     !combo.selectedSessionIds.some(id => removedIds.has(id))
   );
-  persistSavedCombinations();
+  await persistSavedCombinations();
   location.reload();
 }
 
@@ -1647,7 +1798,18 @@ function openSingleSession(sessionId){
   renderWorkspacePanel();
   buildClassTabs();
   switchClass(DB.X.length ? 'X' : 'XII');
-  autoLoadMappingFiles(session);
+  // If server already loaded master rows, skip the Excel file-fetch entirely.
+  const md = session.masterData;
+  const hasServerRows = Store.mode === 'api' &&
+    (md?.studentMaster?.length || md?.teacherMappings?.length);
+  console.log('[CBSE openSingleSession] hasServerRows='+hasServerRows+
+    ' studentMaster='+(md?.studentMaster?.length||0)+
+    ' teacherMappings='+(md?.teacherMappings?.length||0));
+  if(hasServerRows){
+    renderSec();
+  } else {
+    autoLoadMappingFiles(session);
+  }
 }
 
 function onWorkspaceModeChange(){
@@ -1670,7 +1832,7 @@ function onWorkspaceFilterChange(){
   renderSec();
 }
 
-function promptSaveCombination(){
+async function promptSaveCombination(){
   const selected = getActiveSessions();
   if(selected.length < 2){
     alert('Select at least two schools before saving a combination.');
@@ -1689,7 +1851,7 @@ function promptSaveCombination(){
     updatedAt: now,
   };
   savedCombinations = [...savedCombinations, combo];
-  persistSavedCombinations();
+  await persistSavedCombinations();
   renderWorkspacePanel();
 }
 
@@ -1905,7 +2067,7 @@ async function doImport(){
       return;
     }
     savedCombinations = [...savedCombinations, {...item, kind:undefined}];
-    persistSavedCombinations();
+    await persistSavedCombinations();
     await rebuildSessionsFromLocalStorage();
     closeImportOverlay();
     openCombination(item.id);
@@ -1923,8 +2085,14 @@ async function doImport(){
 async function tryRestoreFromLocalStorage(){
   // Detect whether a Flask/SQLite backend is available, then load sessions
   await Store.detectMode();
+  console.log('[CBSE restore] Store.mode='+Store.mode);
   await rebuildSessionsFromLocalStorage();
   const sessions = collectSavedSessions();
+  console.log('[CBSE restore] sessions found='+sessions.length);
+  if(sessions.length) {
+    const s = schoolSessions[sessions[0].sessionId];
+    console.log('[CBSE restore] first session studentMaster='+(s?.masterData?.studentMaster?.length||0)+' teacherMappings='+(s?.masterData?.teacherMappings?.length||0));
+  }
   if(!sessions.length){
     renderWorkspacePanel();
     return;
@@ -3316,8 +3484,20 @@ function isPerformanceMissing(subject, mode){
 }
 
 function getPerformanceThreshold(subject, mode){
-  if(mode === 'total') return 33;
-  return 33;
+  if(mode === 'component'){
+    // Threshold for internal/practical component
+    const max = Number.isFinite(subject.componentMaxMarks) && subject.componentMaxMarks > 0
+      ? subject.componentMaxMarks : 100;
+    return cbsePassMark(max);
+  }
+  if(mode === 'theory'){
+    // Threshold for derived theory marks
+    const max = Number.isFinite(subject.theoryMaxMarks) && subject.theoryMaxMarks > 0
+      ? subject.theoryMaxMarks : 100;
+    return cbsePassMark(max);
+  }
+  // Total marks: gazette is always out of 100
+  return cbsePassMark(100);
 }
 
 function isPerformancePass(subject, mode){
@@ -3339,7 +3519,8 @@ function isPerformanceDistinction(subject, mode){
 }
 
 function getPerformanceLowLabel(mode){
-  return mode === 'total' ? 'Below 33' : 'Below 33%';
+  // Threshold is floor(33%) of max marks — 33 for /100 papers, 26 for /80, etc.
+  return mode === 'total' ? 'Below Pass Mark' : 'Below Pass %';
 }
 
 function getPerformanceDistinctionLabel(mode){
@@ -3452,7 +3633,7 @@ function renderSectionReview(cls){
     const weakMap = {};
     group.students.forEach(student => {
       student.subjects.forEach(subject => {
-        if(subject.grade === 'E' || (subject.grade !== 'AB' && subject.marks < 33)){
+        if(subjectIsFail(subject)){
           weakMap[subject.code] = weakMap[subject.code] || {name:subject.name, count:0};
           weakMap[subject.code].count += 1;
         }
@@ -4391,8 +4572,8 @@ function exportExcel(){
         if(subject.grade === 'AB') group.absent += 1;
         else {
           group.marks.push(subject.marks);
-          if(subject.grade !== 'E' && subject.marks >= 33) group.pass += 1;
-          if(subject.marks < 33) group.low += 1;
+          if(!subjectIsFail(subject) && !subjectIsAbsent(subject)) group.pass += 1;
+          if(subjectIsFail(subject)) group.low += 1;
         }
       });
     });

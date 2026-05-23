@@ -22,7 +22,11 @@ db.init_db()
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # app_version = mtime of app.js — forces browser to re-fetch after every deploy
+    import os
+    app_js_path = os.path.join(BASE_DIR, 'static', 'js', 'app.js')
+    app_version = int(os.path.getmtime(app_js_path)) if os.path.exists(app_js_path) else 1
+    return render_template('index.html', app_version=app_version)
 
 
 # ── Health / mode-detection ───────────────────────────────────
@@ -158,6 +162,25 @@ def api_save_follow_ups(school_code, year):
         return jsonify({'error': 'Expected a JSON object'}), 400
     db.save_follow_ups(school_code, year, notes)
     return jsonify({'status': 'saved', 'count': len(notes)})
+
+
+# ── Performance marks API ────────────────────────────────────────
+
+@app.route('/api/performance/<school_code>/<year>', methods=['GET'])
+def api_get_performance_marks(school_code, year):
+    rows, component_type = db.get_performance_marks(school_code, year)
+    return jsonify({'rows': rows, 'componentType': component_type})
+
+
+@app.route('/api/performance/<school_code>/<year>', methods=['POST'])
+def api_save_performance_marks(school_code, year):
+    data = request.get_json(force=True)
+    rows = data.get('rows', [])
+    component_type = data.get('componentType', 'internal')
+    if not isinstance(rows, list):
+        return jsonify({'error': 'rows must be a JSON array'}), 400
+    db.save_performance_marks(school_code, year, component_type, rows)
+    return jsonify({'status': 'saved', 'count': len(rows)})
 
 
 # ── Combinations API ──────────────────────────────────────────

@@ -74,6 +74,19 @@ def init_db():
             UNIQUE(school_code, year, cls, roll_no)
         );
 
+        CREATE TABLE IF NOT EXISTS performance_marks (
+            id             INTEGER PRIMARY KEY,
+            school_code    TEXT NOT NULL,
+            year           TEXT NOT NULL,
+            component_type TEXT NOT NULL,
+            roll_no        TEXT NOT NULL,
+            cls            TEXT NOT NULL,
+            subject_code   TEXT NOT NULL,
+            component_marks     REAL NOT NULL,
+            component_max_marks REAL NOT NULL,
+            UNIQUE(school_code, year, roll_no, cls, subject_code)
+        );
+
         CREATE TABLE IF NOT EXISTS combinations (
             id                   TEXT PRIMARY KEY,
             name                 TEXT NOT NULL,
@@ -253,6 +266,55 @@ def save_combinations(combos):
               c.get('defaultClassScope','X'), c.get('meritScope','same-class')))
     conn.commit()
     conn.close()
+
+
+def save_performance_marks(school_code, year, component_type, rows):
+    """Replace all performance mark rows for this school/year."""
+    conn = get_db()
+    conn.execute('DELETE FROM performance_marks WHERE school_code=? AND year=?', (school_code, year))
+    conn.executemany('''
+        INSERT INTO performance_marks
+            (school_code, year, component_type, roll_no, cls, subject_code, component_marks, component_max_marks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(school_code, year, roll_no, cls, subject_code) DO UPDATE SET
+            component_marks     = excluded.component_marks,
+            component_max_marks = excluded.component_max_marks,
+            component_type      = excluded.component_type
+    ''', [
+        (school_code, year, component_type,
+         r.get('rollNo',''), r.get('class',''), r.get('subjectCode',''),
+         r.get('componentMarks', 0), r.get('componentMaxMarks', 0))
+        for r in rows
+        if r.get('rollNo') and r.get('class') and r.get('subjectCode')
+           and r.get('componentMarks') is not None and r.get('componentMaxMarks') is not None
+    ])
+    conn.commit()
+    conn.close()
+
+
+def get_performance_marks(school_code, year):
+    """Returns rows in the same shape the JS mapPerformanceRows produces."""
+    conn = get_db()
+    rows = conn.execute(
+        'SELECT component_type, roll_no, cls, subject_code, component_marks, component_max_marks '
+        'FROM performance_marks WHERE school_code=? AND year=? ORDER BY roll_no, subject_code',
+        (school_code, year)
+    ).fetchall()
+    conn.close()
+    if not rows:
+        return [], None
+    component_type = rows[0]['component_type']
+    return [
+        {
+            'rollNo':          r['roll_no'],
+            'class':           r['cls'],
+            'subjectCode':     r['subject_code'],
+            'componentMarks':  r['component_marks'],
+            'componentMaxMarks': r['component_max_marks'],
+            'componentType':   r['component_type'],
+        }
+        for r in rows
+    ], component_type
 
 
 def list_combinations():
