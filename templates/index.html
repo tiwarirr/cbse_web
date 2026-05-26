@@ -27,6 +27,11 @@
     <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="handleImportFile(event)">
     <button class="btn-clear" id="btn-clear" onclick="clearSavedData()" style="display:none">Clear Saved</button>
     <button class="btn-export" id="btn-export" onclick="exportExcel()">Export Excel</button>
+    <!-- User Session Actions -->
+    <span id="header-user-display" style="display:none; font-family:'DM Mono', monospace; font-size:11px; color:#c9a84c;"></span>
+    <button class="btn-restore-json" id="btn-manage-users" onclick="openUserModal()" style="display:none">Manage Users</button>
+    <button class="btn-restore-json" id="btn-change-password" onclick="openPasswordModal()" style="display:none">Change Password</button>
+    <button class="btn-clear" id="btn-logout" onclick="authLogout()" style="display:none">Logout</button>
   </div>
 </header>
 
@@ -112,21 +117,21 @@
         </div>
       </div>
       <div class="workspace-actions">
-        <button class="btn-restore-json workspace-btn" onclick="document.getElementById('student-master-input').click()" style="display:inline-block">Upload Student Master</button>
-        <button class="btn-restore-json workspace-btn" onclick="document.getElementById('teacher-mapping-input').click()" style="display:inline-block">Upload Teacher Mapping</button>
-        <div class="workspace-inline-field">
+        <button class="btn-restore-json workspace-btn premium-student-master" onclick="document.getElementById('student-master-input').click()" style="display:inline-block">Upload Student Master</button>
+        <button class="btn-restore-json workspace-btn premium-teacher-mapping" onclick="document.getElementById('teacher-mapping-input').click()" style="display:inline-block">Upload Teacher Mapping</button>
+        <div class="workspace-inline-field premium-performance-marks">
           <label for="performance-component-type">Performance Basis Upload</label>
           <select id="performance-component-type" class="workspace-select">
             <option value="internal">Internal Marks</option>
             <option value="practical">Practical Marks</option>
           </select>
         </div>
-        <button class="btn-restore-json workspace-btn" onclick="document.getElementById('performance-marks-input').click()" style="display:inline-block">Upload Internal / Practical Marks</button>
+        <button class="btn-restore-json workspace-btn premium-performance-marks" onclick="document.getElementById('performance-marks-input').click()" style="display:inline-block">Upload Internal / Practical Marks</button>
         <button class="btn-export workspace-btn" onclick="promptSaveCombination()" style="display:inline-block">Save Combination</button>
         <div class="template-links">
-          <a class="template-link" href="student_master_template.xlsx" download>Student Master Excel Example</a>
-          <a class="template-link" href="teacher_mapping_template.xlsx" download>Teacher Mapping Excel Example</a>
-          <a class="template-link" href="performance_marks_template.xlsx" download>Internal / Practical Marks Excel Example</a>
+          <a class="template-link premium-student-master" href="student_master_template.xlsx" download>Student Master Excel Example</a>
+          <a class="template-link premium-teacher-mapping" href="teacher_mapping_template.xlsx" download>Teacher Mapping Excel Example</a>
+          <a class="template-link premium-performance-marks" href="performance_marks_template.xlsx" download>Internal / Practical Marks Excel Example</a>
         </div>
       </div>
     </div>
@@ -207,6 +212,114 @@
     <div class="sec-panel" id="sec-sections"><div id="d-sections"></div></div>
     <div class="sec-panel" id="sec-teachers"><div id="d-teachers"></div></div>
     <div class="sec-panel" id="sec-followup"><div id="d-followup"></div></div>
+  </div>
+</div>
+
+<!-- Login Screen Overlay -->
+<div id="login-screen" class="login-overlay" style="display:none">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-logo">S</div>
+      <h2>CBSE Result Analyser</h2>
+    </div>
+    <p class="login-sub">Please sign in to access the analytics portal</p>
+    <div class="login-field">
+      <label for="login-username">Username</label>
+      <input type="text" id="login-username" placeholder="Enter username" required>
+    </div>
+    <div class="login-field">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" placeholder="Enter password" required onkeydown="if(event.key === 'Enter') authLogin()">
+    </div>
+    <div id="login-error" class="login-error" style="color:var(--red); font-size:12px; margin-top:8px; min-height:16px;"></div>
+    <button class="btn-login" onclick="authLogin()">Sign In</button>
+    <div class="login-divider">New user?</div>
+    <div class="login-field">
+      <label for="signup-username">Create Username</label>
+      <input type="text" id="signup-username" placeholder="Choose username">
+    </div>
+    <div class="login-field">
+      <label for="signup-password">Create Password</label>
+      <input type="password" id="signup-password" placeholder="Choose password" onkeydown="if(event.key === 'Enter') authRegisterSelf()">
+    </div>
+    <div id="signup-error" class="login-error" style="color:var(--red); font-size:12px; margin-top:8px; min-height:16px;"></div>
+    <button class="btn-restore-json" style="display:block; width:100%; border-radius:10px; padding:10px;" onclick="authRegisterSelf()">Create Account</button>
+  </div>
+</div>
+
+<!-- User Management Modal -->
+<div id="user-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h2>User Management</h2>
+    <p>Create users and enable premium dashboard features.</p>
+    
+    <div class="user-register-form">
+      <h3>Create User Account</h3>
+      <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px;">
+        <div class="form-field">
+          <label for="reg-username">Username</label>
+          <input type="text" id="reg-username" class="followup-input" placeholder="Username" required>
+        </div>
+        <div class="form-field">
+          <label for="reg-password">Password</label>
+          <input type="password" id="reg-password" class="followup-input" placeholder="Password" required>
+        </div>
+        <div class="form-field">
+          <label for="reg-role">Role</label>
+          <select id="reg-role" class="workspace-select" style="min-height:38px; width:100%; border-radius:10px; padding: 4px 8px;">
+            <option value="user">User (Own Uploads)</option>
+            <option value="admin">Admin (Full Write Access)</option>
+          </select>
+        </div>
+        <div class="form-field" style="display:flex; align-items:flex-end;">
+          <button class="btn-export" style="display:block; width:100%; border-radius:10px; padding:10px;" onclick="authRegister()">Register</button>
+        </div>
+      </div>
+      <div id="reg-error" class="login-error" style="color:var(--red); font-size:12px; margin-top:6px;"></div>
+      <div id="reg-success" style="color:var(--green); font-size:12px; margin-top:6px;"></div>
+    </div>
+    
+    <div class="user-list-section" style="margin-top:20px;">
+      <h3>Registered Users</h3>
+      <div class="tbl-wrap" style="max-height: 200px; overflow-y: auto; margin-top:8px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Premium Features</th>
+              <th>Created At</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="user-table-body">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <div class="modal-actions" style="margin-top:20px; display:flex; justify-content:flex-end;">
+      <button class="btn-clear" style="display:block;" onclick="closeUserModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="password-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h2>Change Password</h2>
+    <p>Update your account security details.</p>
+    <div class="login-field" style="margin-top:12px;">
+      <label for="new-password">New Password</label>
+      <input type="password" id="new-password" placeholder="Minimum 4 characters" class="followup-input" style="width:100%;" required>
+    </div>
+    <div id="password-error" class="login-error" style="color:var(--red); font-size:12px; margin-top:8px; min-height:16px;"></div>
+    <div id="password-success" style="color:var(--green); font-size:12px; margin-top:8px; min-height:16px;"></div>
+    <div class="modal-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn-restore-json" onclick="closePasswordModal()">Cancel</button>
+      <button class="btn-export" style="display:block;" onclick="saveNewPassword()">Update Password</button>
+    </div>
   </div>
 </div>
 

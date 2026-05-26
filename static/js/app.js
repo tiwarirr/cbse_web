@@ -129,6 +129,16 @@ const performanceViewState = {X:'total', XII:'total'};
 ══════════════════════════════════════════════════════════════ */
 const Store = {
   mode: 'local',   // 'local' | 'api'
+  user: null,
+
+  hasFeature(key){
+    return this.mode !== 'api' || this.user?.role === 'admin' || !!this.user?.features?.[key];
+  },
+
+  ownerQuery(session){
+    if(this.mode !== 'api' || !session?.ownerUserId) return '';
+    return `?ownerUserId=${encodeURIComponent(session.ownerUserId)}`;
+  },
 
   async detectMode(){
     try {
@@ -139,12 +149,153 @@ const Store = {
     return 'local';
   },
 
+  async checkAuth() {
+    if (this.mode !== 'api') return { loggedIn: false, user: null };
+    try {
+      const r = await fetch('/auth/status', { cache: 'no-store' });
+      if (r.ok) {
+        const data = await r.json();
+        this.user = data.loggedIn ? data.user : null;
+        return data;
+      }
+    } catch (e) {
+      console.error('[Store] checkAuth failed', e);
+    }
+    this.user = null;
+    return { loggedIn: false, user: null };
+  },
+
+  async login(username, password) {
+    if (this.mode !== 'api') return { error: 'Offline mode' };
+    try {
+      const r = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await r.json();
+      if (r.ok) {
+        this.user = data.user;
+        return { success: true, user: data.user };
+      }
+      return { error: data.error || 'Login failed' };
+    } catch (e) {
+      return { error: 'Network error occurred' };
+    }
+  },
+
+  async logout() {
+    if (this.mode !== 'api') return { success: true };
+    try {
+      const r = await fetch('/auth/logout', { method: 'POST' });
+      if (r.ok) {
+        this.user = null;
+        return { success: true };
+      }
+    } catch (e) {
+      console.error('[Store] logout failed', e);
+    }
+    return { error: 'Logout failed' };
+  },
+
+  async changePassword(password) {
+    if (this.mode !== 'api') return { error: 'Offline mode' };
+    try {
+      const r = await fetch('/api/users/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await r.json();
+      if (r.ok) return { success: true };
+      return { error: data.error || 'Failed to change password' };
+    } catch (e) {
+      return { error: 'Network error occurred' };
+    }
+  },
+
+  async registerUser(username, password, role) {
+    if (this.mode !== 'api') return { error: 'Offline mode' };
+    try {
+      const r = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, role })
+      });
+      const data = await r.json();
+      if (r.ok) return { success: true, user: data.user };
+      return { error: data.error || 'Failed to register user' };
+    } catch (e) {
+      return { error: 'Network error occurred' };
+    }
+  },
+
+  async registerSelf(username, password) {
+    if (this.mode !== 'api') return { error: 'Offline mode' };
+    try {
+      const r = await fetch('/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await r.json();
+      if (r.ok) {
+        this.user = data.user;
+        return { success: true, user: data.user };
+      }
+      return { error: data.error || 'Registration failed' };
+    } catch (e) {
+      return { error: 'Network error occurred' };
+    }
+  },
+
+  async updateUserFeatures(userId, features) {
+    if (this.mode !== 'api') return { error: 'Offline mode' };
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/features`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(features)
+      });
+      const data = await r.json();
+      if (r.ok) return { success: true, features: data.features };
+      return { error: data.error || 'Failed to update features' };
+    } catch (e) {
+      return { error: 'Network error occurred' };
+    }
+  },
+
+  async listUsers() {
+    if (this.mode !== 'api') return [];
+    try {
+      const r = await fetch('/api/admin/users');
+      if (r.status === 401) { this.user = null; syncUserUI(); return []; }
+      if (r.ok) return await r.json();
+    } catch (e) {
+      console.error('[Store] listUsers failed', e);
+    }
+    return [];
+  },
+
+  async deleteUser(username) {
+    if (this.mode !== 'api') return { error: 'Offline mode' };
+    try {
+      const r = await fetch(`/api/admin/users/${username}`, { method: 'DELETE' });
+      if (r.status === 401) { this.user = null; syncUserUI(); return { error: 'Session expired' }; }
+      const data = await r.json();
+      if (r.ok) return { success: true };
+      return { error: data.error || 'Failed to delete user' };
+    } catch (e) {
+      return { error: 'Network error occurred' };
+    }
+  },
+
   async saveSession(session){
     if(this.mode === 'api'){
       for(const cls of ['X','XII']){
         const bundle = session.classes[cls];
         if(!bundle) continue;
-        await fetch('/api/sessions', {
+        const r = await fetch('/api/sessions', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
@@ -155,6 +306,7 @@ const Store = {
             rawText: bundle.rawText,
           }),
         });
+        if (r.status === 401) { this.user = null; syncUserUI(); return; }
       }
     } else {
       ['X','XII'].forEach(cls => {
@@ -168,12 +320,21 @@ const Store = {
     if(this.mode === 'api'){
       try {
         const r = await fetch('/api/sessions', {cache:'no-store'});
+        if (r.status === 401) { this.user = null; syncUserUI(); return {}; }
         if(!r.ok) return {};
         const list = await r.json();
         const grouped = {};
         list.forEach(item => {
-          const sid = createSessionId(item.schoolCode, item.year);
-          if(!grouped[sid]) grouped[sid] = {X:null, XII:null, schoolCode:item.schoolCode, schoolName:item.schoolName, year:item.year};
+          const sid = createSessionId(item.schoolCode, item.year, item.ownerUserId);
+          if(!grouped[sid]) grouped[sid] = {
+            X:null,
+            XII:null,
+            schoolCode:item.schoolCode,
+            schoolName:item.schoolName,
+            year:item.year,
+            ownerUserId:item.ownerUserId,
+            ownerUsername:item.ownerUsername,
+          };
           grouped[sid][item.cls] = item.rawText;
         });
         return grouped;
@@ -194,9 +355,11 @@ const Store = {
     }
   },
 
-  async deleteSession(schoolCode, year){
+  async deleteSession(schoolCode, year, sessionRef=null){
     if(this.mode === 'api'){
-      await fetch(`/api/sessions/${schoolCode}/${year}`, {method:'DELETE'});
+      const session = sessionRef || Object.values(schoolSessions).find(s => s.schoolCode === schoolCode && String(s.year) === String(year));
+      const r = await fetch(`/api/sessions/${schoolCode}/${year}${this.ownerQuery(session)}`, {method:'DELETE'});
+      if (r.status === 401) { this.user = null; syncUserUI(); return; }
     } else {
       ['X','XII'].forEach(cls => localStorage.removeItem(`${schoolCode}-${year}-${cls}`));
     }
@@ -205,11 +368,12 @@ const Store = {
   async saveFollowUps(session){
     const followUps = session.masterData?.followUps || {};
     if(this.mode === 'api'){
-      await fetch(`/api/followup/${session.schoolCode}/${session.year}`, {
+      const r = await fetch(`/api/followup/${session.schoolCode}/${session.year}${this.ownerQuery(session)}`, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(followUps),
       });
+      if (r.status === 401) { this.user = null; syncUserUI(); return; }
     } else {
       localStorage.setItem(
         `${session.schoolCode}-${session.year}-FOLLOWUP`,
@@ -221,7 +385,8 @@ const Store = {
   async loadFollowUps(session){
     if(this.mode === 'api'){
       try {
-        const r = await fetch(`/api/followup/${session.schoolCode}/${session.year}`);
+        const r = await fetch(`/api/followup/${session.schoolCode}/${session.year}${this.ownerQuery(session)}`);
+        if (r.status === 401) { this.user = null; syncUserUI(); return {}; }
         if(r.ok) return await r.json();
       } catch {}
       return {};
@@ -234,11 +399,12 @@ const Store = {
 
   async saveCombinations(combos){
     if(this.mode === 'api'){
-      await fetch('/api/combinations', {
+      const r = await fetch('/api/combinations', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(combos),
       });
+      if (r.status === 401) { this.user = null; syncUserUI(); return; }
     } else {
       localStorage.setItem('CBSE-MULTI-COMBINATIONS', JSON.stringify(combos));
     }
@@ -248,6 +414,7 @@ const Store = {
     if(this.mode === 'api'){
       try {
         const r = await fetch('/api/combinations');
+        if (r.status === 401) { this.user = null; syncUserUI(); return []; }
         if(r.ok) return await r.json();
       } catch {}
       return [];
@@ -263,11 +430,12 @@ const Store = {
   async savePerformanceMarks(session, rows, componentType){
     if(this.mode === 'api'){
       try {
-        const r = await fetch(`/api/performance/${session.schoolCode}/${session.year}`, {
+        const r = await fetch(`/api/performance/${session.schoolCode}/${session.year}${this.ownerQuery(session)}`, {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({rows, componentType}),
         });
+        if (r.status === 401) { this.user = null; syncUserUI(); return; }
         const data = await r.json();
         console.log('[CBSE save] savePerformanceMarks status='+r.status+' rows='+rows.length, data);
       } catch(err) {
@@ -279,7 +447,8 @@ const Store = {
   async loadPerformanceMarks(session){
     if(this.mode === 'api'){
       try {
-        const r = await fetch(`/api/performance/${session.schoolCode}/${session.year}`);
+        const r = await fetch(`/api/performance/${session.schoolCode}/${session.year}${this.ownerQuery(session)}`);
+        if (r.status === 401) { this.user = null; syncUserUI(); return {rows:[], componentType:null}; }
         if(r.ok) return await r.json();  // {rows, componentType}
       } catch {}
     }
@@ -289,11 +458,12 @@ const Store = {
   async saveMasterRows(session, type, rows){
     if(this.mode === 'api'){
       try {
-        const r = await fetch(`/api/master/${session.schoolCode}/${session.year}/${type}`, {
+        const r = await fetch(`/api/master/${session.schoolCode}/${session.year}/${type}${this.ownerQuery(session)}`, {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(rows),
         });
+        if (r.status === 401) { this.user = null; syncUserUI(); return; }
         const data = await r.json();
         console.log('[CBSE save] saveMasterRows', type, 'status='+r.status, 'schoolCode='+session.schoolCode, 'year='+session.year, 'rows='+rows.length, 'response='+JSON.stringify(data));
       } catch(err) {
@@ -305,7 +475,8 @@ const Store = {
   async loadMasterRows(session, type){
     if(this.mode === 'api'){
       try {
-        const r = await fetch(`/api/master/${session.schoolCode}/${session.year}/${type}`);
+        const r = await fetch(`/api/master/${session.schoolCode}/${session.year}/${type}${this.ownerQuery(session)}`);
+        if (r.status === 401) { this.user = null; syncUserUI(); return []; }
         if(r.ok) return await r.json();
       } catch {}
     }
@@ -383,8 +554,9 @@ function createEmptyMasterData(){
   };
 }
 
-function createSessionId(schoolCode, year){
-  return `${schoolCode || 'CBSE'}-${year || new Date().getFullYear()}`;
+function createSessionId(schoolCode, year, ownerUserId){
+  const base = `${schoolCode || 'CBSE'}-${year || new Date().getFullYear()}`;
+  return ownerUserId ? `${base}-u${ownerUserId}` : base;
 }
 
 function getSessionStorageKey(session, suffix){
@@ -396,7 +568,11 @@ function getMappingStorageKey(session, type){
 }
 
 function getSessionLabel(session){
-  return session.schoolName || session.schoolCode || 'Unknown School';
+  const base = session.schoolName || session.schoolCode || 'Unknown School';
+  if(Store.mode === 'api' && Store.user?.role === 'admin' && session.ownerUsername){
+    return `${base} (${session.ownerUsername})`;
+  }
+  return base;
 }
 
 function getActiveSessions(){
@@ -776,7 +952,7 @@ function applySessionToActiveData(sessionId, preferredCls){
   parseDiagnostics.XII = session.classes.XII ? session.classes.XII.diagnostics : null;
   const nextCls = preferredCls || (DB.X.length ? 'X' : DB.XII.length ? 'XII' : null);
   activeCls = nextCls;
-  if(nextCls) document.getElementById('btn-export').style.display = 'inline-block';
+  if(nextCls && Store.hasFeature('excel_export')) document.getElementById('btn-export').style.display = 'inline-block';
 }
 
 function listSessionClassBadges(session){
@@ -886,6 +1062,11 @@ async function rebuildSessionsFromLocalStorage(){
     });
     // Carry over schoolName from server response if available
     if(classes.schoolName) session.schoolName = classes.schoolName;
+    if(classes.ownerUserId) {
+      session.ownerUserId = classes.ownerUserId;
+      session.ownerUsername = classes.ownerUsername || '';
+      session.sessionId = createSessionId(session.schoolCode, session.year, classes.ownerUserId);
+    }
     const merged = mergeSessionIntoRegistry(session);
     merged.masterData = loadSessionMasterData(merged);  // sync: localStorage legacy
     mergedSessions.push(merged);
@@ -1315,9 +1496,9 @@ async function autoLoadMappingFiles(session){
   }
 
   session._mappingLoadPromise = Promise.all([
-    autoLoadMappingFile(session, 'student'),
-    autoLoadMappingFile(session, 'teacher'),
-    autoLoadPerformanceFile(session),
+    Store.hasFeature('student_master_upload') ? autoLoadMappingFile(session, 'student') : Promise.resolve(false),
+    Store.hasFeature('teacher_mapping_upload') ? autoLoadMappingFile(session, 'teacher') : Promise.resolve(false),
+    Store.hasFeature('performance_marks_upload') ? autoLoadPerformanceFile(session) : Promise.resolve(false),
   ]).then(results => {
     session._mappingLoadPromise = null;
     if(activeSessionId === session.sessionId && !isMultiMode()){
@@ -1393,6 +1574,15 @@ async function handleMasterFile(e, type){
   const session = getCurrentSingleSession();
   if(!file || !session){
     alert('Open a single school session before uploading school master data.');
+    return;
+  }
+  const featureKey = type === 'student'
+    ? 'student_master_upload'
+    : type === 'teacher'
+      ? 'teacher_mapping_upload'
+      : 'performance_marks_upload';
+  if(!Store.hasFeature(featureKey)){
+    alert('This Excel upload is a premium feature. Please contact the administrator.');
     return;
   }
 
@@ -1512,10 +1702,10 @@ async function runAnalysis(){
 
   document.getElementById('upload-screen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('btn-export').style.display = 'inline-block';
+  document.getElementById('btn-export').style.display = Store.hasFeature('excel_export') ? 'inline-block' : 'none';
   document.getElementById('btn-add-school').style.display = 'inline-block';
   document.getElementById('btn-clear').style.display = 'inline-block';
-  document.getElementById('btn-backup').style.display = 'inline-block';
+  document.getElementById('btn-backup').style.display = Store.user?.role === 'admin' || Store.mode !== 'api' ? 'inline-block' : 'none';
   document.getElementById('btn-upload-cancel').style.display = 'none';
 
   uploadRaw.X = null;
@@ -1537,7 +1727,7 @@ function saveToLocalStorage(){ /* school sessions are persisted during runAnalys
 async function clearSavedData(){
   const sessions = getActiveSessions();
   for(const session of sessions){
-    await Store.deleteSession(session.schoolCode, session.year);
+    await Store.deleteSession(session.schoolCode, session.year, session);
     // Also clear localStorage keys regardless of mode
     ['X','XII'].forEach(cls => localStorage.removeItem(`${session.schoolCode}-${session.year}-${cls}`));
     [STUDENT_MASTER_SUFFIX, TEACHER_MAPPING_SUFFIX, FOLLOW_UP_SUFFIX].forEach(suffix =>
@@ -1792,7 +1982,7 @@ function openSingleSession(sessionId){
   workspaceState.activeCombinationId = null;
   applySessionToActiveData(sessionId);
   document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('btn-export').style.display = 'inline-block';
+  document.getElementById('btn-export').style.display = Store.hasFeature('excel_export') ? 'inline-block' : 'none';
   document.getElementById('btn-add-school').style.display = 'inline-block';
   renderParseWarnings();
   renderWorkspacePanel();
@@ -2086,6 +2276,18 @@ async function tryRestoreFromLocalStorage(){
   // Detect whether a Flask/SQLite backend is available, then load sessions
   await Store.detectMode();
   console.log('[CBSE restore] Store.mode='+Store.mode);
+  
+  if(Store.mode === 'api'){
+    const auth = await Store.checkAuth();
+    syncUserUI();
+    if(!auth.loggedIn){
+      console.log('[CBSE auth] user not logged in, halting restore');
+      return;
+    }
+  } else {
+    syncUserUI();
+  }
+  
   await rebuildSessionsFromLocalStorage();
   const sessions = collectSavedSessions();
   console.log('[CBSE restore] sessions found='+sessions.length);
@@ -2115,7 +2317,6 @@ async function tryRestoreFromLocalStorage(){
     buttonLabel:'Restore Selected'
   });
   document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('btn-add-school').style.display = 'inline-block';
   renderWorkspacePanel();
   document.getElementById('btn-backup').style.display = 'inline-block';
 }
@@ -4156,6 +4357,10 @@ function exportMultischoolWorkbook(){
 }
 
 function exportExcel(){
+  if(!Store.hasFeature('excel_export')){
+    alert('Excel export is a premium feature. Please contact the administrator.');
+    return;
+  }
   if(isMultiMode()){
     exportMultischoolWorkbook();
     return;
@@ -4617,3 +4822,287 @@ document.getElementById('import-overlay').addEventListener('click', e=>{
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape') closeImportOverlay();
 });
+
+/* ── AUTHENTICATION INTERACTIVE LOGIC ── */
+
+async function authLogin() {
+  const u = document.getElementById('login-username').value.trim();
+  const p = document.getElementById('login-password').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  
+  if(!u || !p) {
+    err.textContent = 'Please enter both username and password.';
+    return;
+  }
+  
+  const res = await Store.login(u, p);
+  if(res.success) {
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    // Now trigger the full restore flow
+    await tryRestoreFromLocalStorage();
+  } else {
+    err.textContent = res.error;
+  }
+}
+
+async function authRegisterSelf() {
+  const u = document.getElementById('signup-username').value.trim();
+  const p = document.getElementById('signup-password').value;
+  const err = document.getElementById('signup-error');
+  err.textContent = '';
+
+  if(!u || !p) {
+    err.textContent = 'Please enter a username and password.';
+    return;
+  }
+
+  const res = await Store.registerSelf(u, p);
+  if(res.success) {
+    document.getElementById('signup-username').value = '';
+    document.getElementById('signup-password').value = '';
+    await tryRestoreFromLocalStorage();
+  } else {
+    err.textContent = res.error;
+  }
+}
+
+async function authLogout() {
+  await Store.logout();
+  location.reload();
+}
+
+async function authRegister() {
+  const u = document.getElementById('reg-username').value.trim();
+  const p = document.getElementById('reg-password').value;
+  const r = document.getElementById('reg-role').value;
+  const err = document.getElementById('reg-error');
+  const succ = document.getElementById('reg-success');
+  err.textContent = '';
+  succ.textContent = '';
+  
+  if(!u || !p) {
+    err.textContent = 'Username and password are required.';
+    return;
+  }
+  
+  const res = await Store.registerUser(u, p, r);
+  if(res.success) {
+    document.getElementById('reg-username').value = '';
+    document.getElementById('reg-password').value = '';
+    succ.textContent = `User ${res.user.username} created successfully.`;
+    await refreshUserList();
+  } else {
+    err.textContent = res.error;
+  }
+}
+
+async function saveNewPassword() {
+  const p = document.getElementById('new-password').value;
+  const err = document.getElementById('password-error');
+  const succ = document.getElementById('password-success');
+  err.textContent = '';
+  succ.textContent = '';
+  
+  if(!p || p.length < 4) {
+    err.textContent = 'Password must be at least 4 characters long.';
+    return;
+  }
+  
+  const res = await Store.changePassword(p);
+  if(res.success) {
+    document.getElementById('new-password').value = '';
+    succ.textContent = 'Password changed successfully.';
+    setTimeout(() => {
+      closePasswordModal();
+    }, 1500);
+  } else {
+    err.textContent = res.error;
+  }
+}
+
+async function refreshUserList() {
+  const body = document.getElementById('user-table-body');
+  if(!body) return;
+  body.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+  const users = await Store.listUsers();
+  
+  if(!users.length) {
+    body.innerHTML = '<tr><td colspan="5">No users found.</td></tr>';
+    return;
+  }
+  
+  body.innerHTML = users.map(user => {
+    const isMasterAdmin = user.username === 'admin';
+    const isSelf = Store.user && Store.user.username === user.username;
+    const canDelete = !isMasterAdmin && !isSelf;
+    const isAdmin = user.role === 'admin';
+    const features = user.features || {};
+    const featureToggles = isAdmin
+      ? '<span style="color:#aaa; font-size:11px;">All enabled</span>'
+      : `
+        <label class="feature-toggle"><input type="checkbox" ${features.student_master_upload ? 'checked' : ''} onchange="toggleUserFeature(${user.id}, 'student_master_upload', this.checked)"> Student master</label>
+        <label class="feature-toggle"><input type="checkbox" ${features.teacher_mapping_upload ? 'checked' : ''} onchange="toggleUserFeature(${user.id}, 'teacher_mapping_upload', this.checked)"> Teacher mapping</label>
+        <label class="feature-toggle"><input type="checkbox" ${features.performance_marks_upload ? 'checked' : ''} onchange="toggleUserFeature(${user.id}, 'performance_marks_upload', this.checked)"> Marks upload</label>
+        <label class="feature-toggle"><input type="checkbox" ${features.excel_export ? 'checked' : ''} onchange="toggleUserFeature(${user.id}, 'excel_export', this.checked)"> Excel export</label>
+      `;
+    
+    return `<tr>
+      <td><strong>${escapeHtml(user.username)}</strong></td>
+      <td><span class="followup-tag" style="background:${user.role === 'admin' ? '#eef2ff; color:#4f46e5;' : '#f3f4f6; color:#374151;'}">${user.role.toUpperCase()}</span></td>
+      <td><div class="feature-toggle-grid">${featureToggles}</div></td>
+      <td>${new Date(user.created_at || Date.now()).toLocaleDateString()}</td>
+      <td>
+        ${canDelete ? `<button class="btn-clear" style="padding: 2px 10px; font-size: 11px; display:inline-block;" onclick="deleteUserAccount('${user.username}')">Delete</button>` : '<span style="color:#aaa; font-size:11px;">Restricted</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleUserFeature(userId, featureKey, enabled) {
+  const users = await Store.listUsers();
+  const user = users.find(item => item.id === userId);
+  if(!user) return;
+  const features = {...(user.features || {}), [featureKey]: enabled};
+  const res = await Store.updateUserFeatures(userId, features);
+  if(!res.success) {
+    alert(res.error);
+    await refreshUserList();
+  }
+}
+
+async function deleteUserAccount(username) {
+  if(confirm(`Are you sure you want to delete user account "${username}"?`)) {
+    const res = await Store.deleteUser(username);
+    if(res.success) {
+      await refreshUserList();
+    } else {
+      alert(res.error);
+    }
+  }
+}
+
+function openUserModal() {
+  document.getElementById('user-modal').style.display = 'flex';
+  document.getElementById('reg-error').textContent = '';
+  document.getElementById('reg-success').textContent = '';
+  refreshUserList();
+}
+
+function closeUserModal() {
+  document.getElementById('user-modal').style.display = 'none';
+}
+
+function openPasswordModal() {
+  document.getElementById('password-modal').style.display = 'flex';
+  document.getElementById('password-error').textContent = '';
+  document.getElementById('password-success').textContent = '';
+}
+
+function closePasswordModal() {
+  document.getElementById('password-modal').style.display = 'none';
+}
+
+function syncUserUI() {
+  const loginOverlay = document.getElementById('login-screen');
+  const userDisp = document.getElementById('header-user-display');
+  const btnLogout = document.getElementById('btn-logout');
+  const btnPass = document.getElementById('btn-change-password');
+  const btnManage = document.getElementById('btn-manage-users');
+  
+  // Admin-restricted buttons
+  const btnAdd = document.getElementById('btn-add-school');
+  const btnClear = document.getElementById('btn-clear');
+  const btnRestore = document.getElementById('btn-restore-json');
+  const btnBackup = document.getElementById('btn-backup');
+  const btnExport = document.getElementById('btn-export');
+  const workspaceActions = document.querySelector('.workspace-actions');
+  const uploadScreen = document.getElementById('upload-screen');
+  const setDisplayAll = (selector, enabled, display='inline-block') => {
+    document.querySelectorAll(selector).forEach(el => {
+      el.style.display = enabled ? display : 'none';
+    });
+  };
+  const syncPremiumControls = () => {
+    setDisplayAll('.premium-student-master', Store.hasFeature('student_master_upload'));
+    setDisplayAll('.premium-teacher-mapping', Store.hasFeature('teacher_mapping_upload'));
+    setDisplayAll('.premium-performance-marks', Store.hasFeature('performance_marks_upload'));
+    if(btnExport) btnExport.style.display = Store.hasFeature('excel_export') ? 'inline-block' : 'none';
+  };
+  
+  if (Store.mode === 'api') {
+    if (!Store.user) {
+      // Show login overlay, hide dashboard/workspace
+      loginOverlay.style.display = 'flex';
+      userDisp.style.display = 'none';
+      btnLogout.style.display = 'none';
+      btnPass.style.display = 'none';
+      btnManage.style.display = 'none';
+      
+      // Hide admin operations
+      if(btnAdd) btnAdd.style.display = 'none';
+      if(btnClear) btnClear.style.display = 'none';
+      if(btnRestore) btnRestore.style.display = 'none';
+      if(btnBackup) btnBackup.style.display = 'none';
+      if(btnExport) btnExport.style.display = 'none';
+      syncPremiumControls();
+      
+      document.getElementById('dashboard').style.display = 'none';
+      if(uploadScreen) uploadScreen.style.display = 'none';
+    } else {
+      // User is logged in
+      loginOverlay.style.display = 'none';
+      userDisp.textContent = `User: ${Store.user.username} (${Store.user.role.toUpperCase()})`;
+      userDisp.style.display = 'inline';
+      btnLogout.style.display = 'inline-block';
+      btnPass.style.display = 'inline-block';
+      
+      const isAdmin = Store.user.role === 'admin';
+      btnManage.style.display = isAdmin ? 'inline-block' : 'none';
+      
+      // Enforce admin controls
+      if(btnAdd) btnAdd.style.display = 'inline-block';
+      if(btnClear) btnClear.style.display = 'inline-block';
+      if(btnRestore) btnRestore.style.display = isAdmin ? 'inline-block' : 'none';
+      if(btnBackup) btnBackup.style.display = isAdmin ? 'inline-block' : 'none';
+      
+      if(workspaceActions) {
+        workspaceActions.style.display = 'flex';
+      }
+      syncPremiumControls();
+      
+      const sessions = collectSavedSessions();
+      if(!sessions.length) {
+        if(isAdmin) {
+          if(uploadScreen) uploadScreen.style.display = 'flex';
+          document.getElementById('dashboard').style.display = 'none';
+        } else {
+          // Regular users see their own workspace only.
+          if(uploadScreen) uploadScreen.style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          document.getElementById('session-list').innerHTML = '<div class="workspace-empty">No saved schools available. Please contact your administrator.</div>';
+        }
+      } else {
+        if(uploadScreen) uploadScreen.style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+      }
+    }
+  } else {
+    // Local / Offline mode (no auth UI)
+    loginOverlay.style.display = 'none';
+    userDisp.style.display = 'none';
+    btnLogout.style.display = 'none';
+    btnPass.style.display = 'none';
+    btnManage.style.display = 'none';
+    
+    // Enable all operations for local mode
+    if(btnAdd) btnAdd.style.display = 'inline-block';
+    if(btnClear) btnClear.style.display = 'inline-block';
+    if(btnRestore) btnRestore.style.display = 'inline-block';
+    if(btnBackup) btnBackup.style.display = 'inline-block';
+    if(btnExport) btnExport.style.display = 'inline-block';
+    if(workspaceActions) workspaceActions.style.display = 'flex';
+    syncPremiumControls();
+  }
+}
