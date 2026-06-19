@@ -2810,7 +2810,7 @@ function renderSubjects(cls){
 
   const sm = {};
   enrichedStudents.forEach(student => student.subjects.forEach(subject => {
-    if(!sm[subject.code]) sm[subject.code] = {code:subject.code, name:subject.name, marks:[], compareValues:[], maxValues:[], pass:0, valid:0, abs:0, missing:0, mb:{}};
+    if(!sm[subject.code]) sm[subject.code] = {code:subject.code, name:subject.name, marks:[], compareValues:[], performanceRecords:[], maxValues:[], pass:0, valid:0, abs:0, missing:0, mb:{}};
     const entry = sm[subject.code];
     if(subjectIsAbsent(subject)){
       entry.abs++;
@@ -2826,6 +2826,9 @@ function renderSubjects(cls){
     entry.marks.push(mark);
     if(compareValue !== null) entry.compareValues.push(compareValue);
     if(maxValue !== null) entry.maxValues.push(maxValue);
+    if(compareValue !== null && maxValue !== null){
+      entry.performanceRecords.push({mark, maxValue, percentage:(mark / maxValue) * 100});
+    }
     entry.valid++;
     const bucket = getBucket(subject);
     if(bucket) entry.mb[bucket] = (entry.mb[bucket] || 0) + 1;
@@ -2850,6 +2853,7 @@ function renderSubjects(cls){
           fail: 0,
           marks: [],
           compareValues: [],
+          performanceRecords: [],
           maxValues: [],
           mb: {},
         };
@@ -2871,6 +2875,9 @@ function renderSubjects(cls){
       row.marks.push(mark);
       if(compareValue !== null) row.compareValues.push(compareValue);
       if(maxValue !== null) row.maxValues.push(maxValue);
+      if(compareValue !== null && maxValue !== null){
+        row.performanceRecords.push({mark, maxValue, percentage:(mark / maxValue) * 100});
+      }
       if(isPerformancePass(subject, mode)) row.pass += 1;
       else row.fail += 1;
       const bucket = getBucket(subject);
@@ -2910,8 +2917,8 @@ function renderSubjects(cls){
               <th rowspan="2" style="white-space:nowrap">THRESHOLD%</th>
               <th rowspan="2" style="white-space:nowrap">OUT OF</th>
               <th rowspan="2" style="white-space:nowrap">AVG</th>
-              <th rowspan="2" style="white-space:nowrap">MAX</th>
-              <th rowspan="2" style="white-space:nowrap">MIN</th>
+              <th rowspan="2" style="white-space:nowrap">MAX<div style="font-size:9px;font-weight:600;color:#999">% · MARKS · COUNT</div></th>
+              <th rowspan="2" style="white-space:nowrap">MIN<div style="font-size:9px;font-weight:600;color:#999">% · MARKS · COUNT</div></th>
               <th colspan="8" style="text-align:center;background:var(--paper);color:#888;font-size:11px;letter-spacing:.06em">MARKS DISTRIBUTION</th>
             </tr>
             <tr>${buckets.map(bucket => `<th style="white-space:nowrap;font-size:11px;text-align:center;padding:4px 6px">${bucket}</th>`).join('')}</tr>
@@ -2919,8 +2926,8 @@ function renderSubjects(cls){
           <tbody>${subs.map(subject => {
             const total = subject.valid + subject.abs + subject.missing;
             const avgMarks = formatPerformanceValue(subject.compareValues, mode, 'avg');
-            const maxMarks = formatPerformanceValue(subject.compareValues, mode, 'max');
-            const minMarks = formatPerformanceValue(subject.compareValues, mode, 'min');
+            const maxMarks = formatPerformanceExtreme(subject.performanceRecords, 'max');
+            const minMarks = formatPerformanceExtreme(subject.performanceRecords, 'min');
             const outOf = getPerformanceOutOfLabel(subject.maxValues, mode);
             const fail = subject.valid - subject.pass;
             const passPct = subject.valid ? pct(subject.pass, subject.valid) : '0.0';
@@ -2947,16 +2954,16 @@ function renderSubjects(cls){
                         <th style="text-align:center">Threshold %</th>
                         <th style="text-align:center">Out Of</th>
                         <th style="text-align:center">Avg</th>
-                        <th style="text-align:center">Max</th>
-                        <th style="text-align:center">Min</th>
+                        <th style="text-align:center">Max<div style="font-size:9px;font-weight:600;color:#999">% · Marks · Count</div></th>
+                        <th style="text-align:center">Min<div style="font-size:9px;font-weight:600;color:#999">% · Marks · Count</div></th>
                         ${buckets.map(bucket => `<th style="text-align:center">${bucket}</th>`).join('')}
                       </tr>
                     </thead>
                     <tbody>
                       ${detailRows.map(row => {
                         const rowAvg = formatPerformanceValue(row.compareValues, mode, 'avg');
-                        const rowMax = formatPerformanceValue(row.compareValues, mode, 'max');
-                        const rowMin = formatPerformanceValue(row.compareValues, mode, 'min');
+                        const rowMax = formatPerformanceExtreme(row.performanceRecords, 'max');
+                        const rowMin = formatPerformanceExtreme(row.performanceRecords, 'min');
                         const rowOutOf = getPerformanceOutOfLabel(row.maxValues, mode);
                         const rowPassPct = row.taught ? ((row.pass / row.taught) * 100).toFixed(1) : '0.0';
                         return `<tr>
@@ -3771,6 +3778,29 @@ function formatPerformanceValue(values, mode, type){
   return mode === 'total'
     ? numeric.toFixed(1).replace(/\.0$/, '')
     : `${numeric.toFixed(1)}%`;
+}
+
+function formatPerformanceExtreme(records, type){
+  const validRecords = (records || []).filter(record =>
+    Number.isFinite(record.mark) &&
+    Number.isFinite(record.maxValue) &&
+    record.maxValue > 0 &&
+    Number.isFinite(record.percentage)
+  );
+  if(!validRecords.length) return 'NA';
+
+  const percentages = validRecords.map(record => record.percentage);
+  const extreme = type === 'min' ? Math.min(...percentages) : Math.max(...percentages);
+  const matches = validRecords.filter(record => Math.abs(record.percentage - extreme) < 0.000001);
+  const actualMarks = [...new Set(matches.map(record => {
+    const mark = Number.isInteger(record.mark) ? String(record.mark) : record.mark.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    const maxValue = Number.isInteger(record.maxValue) ? String(record.maxValue) : record.maxValue.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return `${mark}/${maxValue}`;
+  }))];
+
+  return `<div style="white-space:nowrap;font-weight:700">${extreme.toFixed(1)}%</div>
+    <div style="white-space:nowrap;font-size:10px;color:#777">Marks: ${actualMarks.join(', ')}</div>
+    <div style="white-space:nowrap;font-size:10px;color:#999">Count: ${matches.length}</div>`;
 }
 
 function renderPerformanceControls(cls){
