@@ -2835,6 +2835,17 @@ function renderSubjects(cls){
     if(isPerformancePass(subject, mode)) entry.pass++;
   }));
   const subs = Object.values(sm).filter(subject => (subject.valid + subject.abs + subject.missing) > 0).sort((a,b) => avg(b.compareValues) - avg(a.compareValues));
+  const heatMapRows = subs.map(subject => {
+    const percentages = buckets.map(bucket => {
+      const count = subject.mb[bucket] || 0;
+      return {
+        bucket,
+        count,
+        percentage: subject.valid ? (count / subject.valid) * 100 : 0
+      };
+    });
+    return {subject, percentages};
+  });
 
   const teacherDetails = {};
   enrichedStudents.forEach(student => {
@@ -2894,6 +2905,53 @@ function renderSubjects(cls){
     <div class="card">
       <div class="card-title">Average ${modeLabel} by Subject - Class ${cls}</div>
       <div class="cwrap-lg"><canvas id="c-subavg-${cls}"></canvas></div>
+    </div>
+    <div class="card subject-heatmap-card">
+      <div class="subject-heatmap-heading">
+        <div>
+          <div class="card-title subject-heatmap-title">Marks Distribution Heat Map - Class ${cls}</div>
+          <div class="subject-heatmap-subtitle">Each cell shows the percentage of applicable students in that marks bucket. Absent and unavailable marks are excluded.</div>
+        </div>
+        <div class="subject-heatmap-legend" aria-label="Heat map colour scale from zero to one hundred percent">
+          <span>0%</span>
+          <span class="subject-heatmap-legend-bar" aria-hidden="true"></span>
+          <span>100%</span>
+        </div>
+      </div>
+      <div class="subject-heatmap-scroll" tabindex="0" aria-label="Subject marks distribution heat map">
+        <table class="subject-heatmap-table">
+          <thead>
+            <tr>
+              <th class="subject-heatmap-subject-col">Subject</th>
+              ${buckets.map(bucket => `<th>${bucket}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${heatMapRows.map(row => `
+              <tr>
+                <th class="subject-heatmap-subject-col" scope="row">
+                  <span>${escapeHtml(row.subject.name)}</span>
+                  <small>${row.subject.valid} applicable</small>
+                </th>
+                ${row.percentages.map(cell => {
+                  const roundedPercentage = Number(cell.percentage.toFixed(1));
+                  const isEmpty = cell.count === 0;
+                  const background = isEmpty
+                    ? '#f1f0ed'
+                    : `hsl(174 68% ${Math.max(28, 94 - (roundedPercentage * 0.66))}%)`;
+                  const color = roundedPercentage >= 58 ? '#fff' : '#123b38';
+                  const tooltip = `${row.subject.name} · ${cell.bucket}: ${cell.count} of ${row.subject.valid} applicable students (${roundedPercentage.toFixed(1)}%)`;
+                  const safeTooltip = escapeHtml(tooltip).replace(/"/g, '&quot;');
+                  return `<td class="subject-heatmap-cell${isEmpty ? ' is-empty' : ''}"
+                    style="background:${background};color:${color}"
+                    title="${safeTooltip}"
+                    aria-label="${safeTooltip}">${roundedPercentage.toFixed(1)}%</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
     <div class="card" style="max-width:100%;overflow-x:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">

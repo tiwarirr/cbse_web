@@ -1098,6 +1098,136 @@ header {
   border-bottom:1px solid var(--border);
 }
 
+.subject-heatmap-card {
+  overflow:hidden;
+}
+
+.subject-heatmap-heading {
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:20px;
+  margin-bottom:14px;
+}
+
+.subject-heatmap-title {
+  margin-bottom:6px;
+}
+
+.subject-heatmap-subtitle {
+  max-width:760px;
+  color:#7b746c;
+  font-size:12px;
+  line-height:1.5;
+}
+
+.subject-heatmap-legend {
+  display:flex;
+  align-items:center;
+  flex:0 0 auto;
+  gap:7px;
+  color:#77716a;
+  font-family:'DM Mono', monospace;
+  font-size:10px;
+  font-weight:700;
+}
+
+.subject-heatmap-legend-bar {
+  width:120px;
+  height:10px;
+  border:1px solid #d8e4e1;
+  border-radius:999px;
+  background:linear-gradient(90deg, #f1f0ed 0%, hsl(174 68% 78%) 25%, hsl(174 68% 61%) 50%, hsl(174 68% 44%) 75%, hsl(174 68% 28%) 100%);
+}
+
+.subject-heatmap-scroll {
+  max-width:100%;
+  overflow-x:auto;
+  border:1px solid #e4e0d9;
+  border-radius:8px;
+  outline:none;
+}
+
+.subject-heatmap-scroll:focus-visible {
+  box-shadow:0 0 0 3px rgba(14,116,144,.2);
+}
+
+.subject-heatmap-table {
+  min-width:850px;
+  table-layout:fixed;
+  border-collapse:separate;
+  border-spacing:3px;
+  background:#fff;
+}
+
+.subject-heatmap-table thead th {
+  padding:9px 8px;
+  border-radius:4px;
+  text-align:center;
+}
+
+.subject-heatmap-table .subject-heatmap-subject-col {
+  position:sticky;
+  left:0;
+  z-index:2;
+  width:210px;
+  min-width:210px;
+  text-align:left;
+}
+
+.subject-heatmap-table tbody .subject-heatmap-subject-col {
+  padding:8px 12px;
+  background:#faf8f4;
+  color:var(--ink);
+  box-shadow:4px 0 8px rgba(26,26,46,.06);
+  font-size:12px;
+}
+
+.subject-heatmap-table tbody .subject-heatmap-subject-col span,
+.subject-heatmap-table tbody .subject-heatmap-subject-col small {
+  display:block;
+}
+
+.subject-heatmap-table tbody .subject-heatmap-subject-col small {
+  margin-top:2px;
+  color:#999188;
+  font-family:'DM Mono', monospace;
+  font-size:9px;
+  font-weight:500;
+}
+
+.subject-heatmap-table tbody tr {
+  border:0;
+}
+
+.subject-heatmap-table tbody tr:hover {
+  background:transparent;
+}
+
+.subject-heatmap-cell {
+  height:46px;
+  padding:7px 5px;
+  border-radius:4px;
+  text-align:center;
+  font-family:'DM Mono', monospace;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+  transition:transform .12s ease, box-shadow .12s ease;
+}
+
+.subject-heatmap-cell:hover {
+  position:relative;
+  z-index:3;
+  transform:scale(1.04);
+  box-shadow:0 3px 12px rgba(15,118,110,.2);
+}
+
+.subject-heatmap-cell.is-empty {
+  color:#b6b1aa !important;
+  font-weight:600;
+}
+
 .two-col {
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -1438,6 +1568,22 @@ tbody td { padding:9px 12px; }
   .cls-stripe { padding:14px 18px; }
   .cs-class { font-size:38px; }
   .parse-banner-inner { padding:14px 16px; }
+  .subject-heatmap-heading {
+    align-items:flex-start;
+    flex-direction:column;
+    gap:10px;
+  }
+  .subject-heatmap-legend {
+    width:100%;
+  }
+  .subject-heatmap-legend-bar {
+    flex:1;
+    width:auto;
+  }
+  .subject-heatmap-table .subject-heatmap-subject-col {
+    width:160px;
+    min-width:160px;
+  }
 }
 
 ::-webkit-scrollbar-track { background:#f0ede8; }

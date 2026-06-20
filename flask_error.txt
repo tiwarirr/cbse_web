@@ -1,0 +1,46 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 482-123-525
+127.0.0.1 - - [20/Jun/2026 09:58:30] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:53] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:53] "GET /static/css/styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:53] "GET /static/css/fonts.css HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:53] "GET /static/js/app.js?v=1781848648 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/js/chart.umd.min.js HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/js/xlsx.full.min.js HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /api/ping HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /auth/status HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/fonts/dm-serif-display-latin-400-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/fonts/nunito-latin-400-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/fonts/nunito-latin-700-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/fonts/dm-mono-latin-400-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/fonts/dm-serif-display-latin-400-italic.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /static/fonts/nunito-latin-800-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:58:54] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:05] "POST /auth/login HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:05] "GET /api/ping HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:05] "GET /auth/status HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:05] "GET /api/sessions HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:06] "GET /api/master/60478/2026/student?ownerUserId=3 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:06] "GET /api/followup/60478/2026?ownerUserId=3 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:06] "GET /api/master/60478/2026/teacher?ownerUserId=3 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:06] "GET /api/performance/60478/2026?ownerUserId=3 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:06] "GET /api/combinations HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /api/mappings/60478-2026-teacher_mapping.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /api/mappings/60478-2026-student_master.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /60478-2026-student_master.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /60478-2026-teacher_mapping.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /api/mappings/60478-student_master.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /api/mappings/60478-teacher_mapping.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /static/fonts/dm-mono-latin-300-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /60478-student_master.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /60478-teacher_mapping.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /api/mappings/student_master.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /api/mappings/teacher_mapping.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /student_master.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /teacher_mapping.xlsx HTTP/1.1" 404 -
+127.0.0.1 - - [20/Jun/2026 09:59:08] "GET /static/fonts/dm-mono-latin-500-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Jun/2026 09:59:27] "GET /static/fonts/nunito-latin-600-normal.woff2 HTTP/1.1" 200 -
