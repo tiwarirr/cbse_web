@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBSE Result Dashboard — User Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;700&family=DM+Serif+Display&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #1a1a2e;
+  --cream: #f5f0e8;
+  --paper: #faf8f4;
+  --gold: #c9a84c;
+  --gold-lt: #e8d5a3;
+  --gold-dk: #a07830;
+  --teal: #0e7490;
+  --teal-lt: #e0f4f8;
+  --border: #ddd8ce;
+  --shadow: 0 2px 16px rgba(26,26,46,.09);
+  --shadow-lg: 0 8px 40px rgba(26,26,46,.15);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Nunito', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  line-height: 1.7;
+  font-size: 15px;
+}
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--ink);
+  color: #fff;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  height: 64px;
+  gap: 14px;
+  box-shadow: 0 2px 20px rgba(0,0,0,.3);
+}
+nav .logo {
+  width: 36px; height: 36px;
+  background: var(--gold);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+nav .title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px;
+}
+nav .sub {
+  font-size: 10px;
+  color: var(--gold-lt);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-left: auto;
+  opacity: .7;
+}
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+h1 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 36px;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+h1 em { color: var(--gold-dk); font-style: italic; }
+.subtitle {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 40px;
+}
+h2 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 24px;
+  margin: 48px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--gold);
+}
+h3 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px;
+  margin: 32px 0 12px;
+  color: var(--gold-dk);
+}
+p, li { color: #444; }
+p { margin-bottom: 14px; }
+.section-card {
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 28px 32px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+.section-card h3 { margin-top: 0; }
+code {
+  background: #eee;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: var(--ink);
+}
+pre {
+  background: var(--ink);
+  color: #e8d5a3;
+  padding: 16px 20px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 12px 0;
+}
+.tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.tag-gold { background: var(--gold-lt); color: var(--gold-dk); }
+.tag-teal { background: var(--teal-lt); color: var(--teal); }
+.tag-ink { background: #e0d8cc; color: var(--ink); }
+.tag-green { background: #d6f0e0; color: #1a7a4a; }
+.tag-red { background: #fce8e8; color: #c0392b; }
+.tag-amber { background: #fff0d6; color: #d4800a; }
+.step-list {
+  list-style: none;
+  counter-reset: step;
+}
+.step-list li {
+  counter-increment: step;
+  padding: 12px 16px 12px 48px;
+  position: relative;
+  margin-bottom: 8px;
+  background: var(--cream);
+  border-radius: 8px;
+  border-left: 3px solid var(--gold);
+}
+.step-list li::before {
+  content: counter(step);
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 26px; height: 26px;
+  background: var(--gold);
+  color: #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+}
+ul.feature-list { list-style: none; padding: 0; }
+ul.feature-list li {
+  padding: 10px 16px 10px 36px;
+  position: relative;
+  margin-bottom: 6px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+ul.feature-list li::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 16px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.tip {
+  background: #fffef5;
+  border: 1px solid var(--gold-lt);
+  border-left: 4px solid var(--gold);
+  padding: 14px 18px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.tip strong { color: var(--gold-dk); }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 14px;
+}
+th, td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+tr:nth-child(even) td { background: #fcfaf6; }
+hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+footer {
+  text-align: center;
+  padding: 32px;
+  font-size: 12px;
+  color: #aaa;
+  font-family: 'DM Mono', monospace;
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">S</div>
+  <div class="title">CBSE Result Dashboard</div>
+  <div class="sub">User Guide</div>
+</nav>
+
+<div class="container">
+
+<h1>CBSE Result Dashboard<br><em>User Guide</em></h1>
+<p class="subtitle">Parsing, analysing, and exporting CBSE board exam results from gazette TXT files.</p>
+
+<!-- ─── OVERVIEW ─── -->
+<h2>Overview</h2>
+<div class="section-card">
+  <p>The <strong>CBSE Result Dashboard</strong> is a web application that parses CBSE board result gazette files and provides detailed analytics. It supports both <strong>Class X</strong> (Secondary School Examination) and <strong>Class XII</strong> (Senior School Certificate Examination) gazette TXT files.</p>
+  <p>The app runs in two modes:</p>
+  <ul class="feature-list" style="margin-top:8px">
+    <li><strong>API mode</strong> &mdash; connected to a Flask backend with SQLite. Data is persisted on the server, and users can log in for multi-user access.</li>
+    <li><strong>Local mode</strong> &mdash; operates entirely in the browser using <code>localStorage</code>. No server required; everything runs client-side.</li>
+  </ul>
+  <div class="tip"><strong>Note:</strong> The app auto-detects which mode to use. If a Flask server is detected, it uses the API; otherwise, it falls back to localStorage.</div>
+</div>
+
+<!-- ─── QUICK START ─── -->
+<h2>Quick Start</h2>
+<div class="section-card">
+  <ol class="step-list">
+    <li><strong>Upload gazette TXT files.</strong> Drag-and-drop or click to browse for Class X and/or Class XII files on the upload screen. The app auto-detects the class from the file content.</li>
+    <li><strong>Click "Analyse Results".</strong> The app parses the gazette and loads the dashboard.</li>
+    <li><strong>Explore the dashboard tabs.</strong> Navigate through Summary, Subjects, Merit List, Gender, All Students, Section Review, Teacher Review, and Follow-Up.</li>
+    <li><strong>Upload master data (optional).</strong> Upload Excel files for Student Master, Teacher Mapping, or Internal/Practical Marks to enrich the analysis.</li>
+    <li><strong>Export to Excel.</strong> Click the "Export Excel" button to download a formatted workbook.</li>
+  </ol>
+</div>
+
+<!-- ─── LOGIN & ACCOUNTS ─── -->
+<h2>Login &amp; User Accounts</h2>
+<div class="section-card">
+  <p>In API mode, the app supports multi-user access with two roles:</p>
+  <table>
+    <tr><th>Role</th><th>Permissions</th></tr>
+    <tr><td><span class="tag tag-gold">Admin</span></td><td>Full access: view all data, manage users, enable premium features, upload unlimited result files.</td></tr>
+    <tr><td><span class="tag tag-teal">User</span></td><td>Limited to own uploads (max 2 result files). Premium features (master data uploads, Excel export) must be enabled by an admin.</td></tr>
+  </table>
+
+  <h3>Default Admin Credentials</h3>
+  <pre>Username: admin
+Password: admin123</pre>
+
+  <h3>First-Time Login</h3>
+  <ol class="step-list">
+    <li>Open the app. If running in API mode, the login screen appears.</li>
+    <li>Sign in with the admin credentials, or create a new account in the "New user?" section.</li>
+    <li>Regular users can create their own accounts via the sign-up form.</li>
+  </ol>
+
+  <h3>User Management (Admin only)</h3>
+  <p>Click <strong>"Manage Users"</strong> in the header to open the user management modal. From here you can:</p>
+  <ul class="feature-list">
+    <li>Create new user accounts (admin or regular user).</li>
+    <li>Toggle premium features per user: Student Master upload, Teacher Mapping upload, Performance Marks upload, Excel Export.</li>
+    <li>Delete users (except the master admin account or yourself).</li>
+  </ul>
+
+  <h3>Change Password</h3>
+  <p>Click <strong>"Change Password"</strong> in the header to update your password. Minimum 4 characters.</p>
+</div>
+
+<!-- ─── BUILDING SESSIONS ─── -->
+<h2>Working with Sessions</h2>
+<div class="section-card">
+  <p>A <strong>session</strong> represents a single school's result data for a given year, containing Class X and/or Class XII gazette data plus any associated master data (student lists, teacher mappings, performance marks, follow-up notes).</p>
+
+  <h3>Uploading Result Files</h3>
+  <ol class="step-list">
+    <li>Click <strong>"Add School"</strong> or navigate to the upload screen.</li>
+    <li>Drag-and-drop TXT files onto the Class X and/or Class XII cards, or click to browse.</li>
+    <li>The app auto-detects whether the file is Class X or Class XII by checking headers like "SECONDARY SCHOOL EXAMINATION" or "SENIOR SCHOOL CERTIFICATE".</li>
+    <li>Once files are loaded, click <strong>"Analyse Results"</strong> to parse and load the dashboard.</li>
+  </ol>
+
+  <h3>Session Limitations</h3>
+  <p>Regular users can upload a maximum of <strong>2 result files</strong> total. Admin users have no limit.</p>
+
+  <h3>Multi-School Workspace</h3>
+  <p>You can work with multiple schools simultaneously:</p>
+  <ul class="feature-list">
+    <li><strong>Select schools</strong> in the workspace panel by clicking "Select" on school cards.</li>
+    <li>Switch to <strong>"Multi-School"</strong> view mode for cross-school comparisons.</li>
+    <li>View the <strong>Summary</strong> tab to see each school's stats side-by-side.</li>
+    <li>The <strong>Merit List</strong> tab combines students across schools into a single ranked list.</li>
+    <li><strong>Save combinations</strong> to quickly restore a set of selected schools later.</li>
+  </ul>
+
+  <h3>Backup &amp; Restore</h3>
+  <ul class="feature-list">
+    <li>Click <strong>"Backup"</strong> to download a JSON file containing all your sessions and combinations.</li>
+    <li>Click <strong>"Restore Backup"</strong> and select a JSON backup file to restore data.</li>
+    <li>In local mode, data persists in the browser's localStorage until cleared.</li>
+    <li>Click <strong>"Clear Saved"</strong> to remove all sessions from storage.</li>
+  </ul>
+</div>
+
+<!-- ─── MASTER DATA ─── -->
+<h2>Master Data Enrichment</h2>
+<div class="section-card">
+  <p>Master data is uploaded via Excel files (<code>.xlsx</code>, <code>.xls</code>, or <code>.csv</code>) and enriches the parsed student records with section, class teacher, subject teacher, and internal/practical marks information.</p>
+
+  <div class="tip"><strong>Premium features:</strong> Uploading master data requires the appropriate feature permissions. Admins have these by default; regular users need an admin to enable them.</div>
+
+  <h3>Student Master</h3>
+  <p>Maps roll numbers to sections, class teachers, streams, and houses.</p>
+  <table>
+    <tr><th>Expected Column Headers</th><th>Description</th></tr>
+    <tr><td><code>rollNo</code>, <code>rollnumber</code>, <code>admissionno</code></td><td>Student's roll number (digits extracted)</td></tr>
+    <tr><td><code>class</code>, <code>cls</code></td><td>Class (X or XII)</td></tr>
+    <tr><td><code>section</code>, <code>sec</code></td><td>Section name (e.g., A, B, C)</td></tr>
+    <tr><td><code>classTeacher</code>, <code>classteachername</code>, <code>teacher</code></td><td>Class teacher name</td></tr>
+    <tr><td><code>stream</code></td><td>Stream (Science, Commerce, etc.)</td></tr>
+    <tr><td><code>house</code></td><td>House name</td></tr>
+  </table>
+  <p>Click <strong>"Upload Student Master"</strong> to load. A template is available for download.</p>
+
+  <h3>Teacher Mapping</h3>
+  <p>Maps subject teachers to sections.</p>
+  <table>
+    <tr><th>Expected Column Headers</th><th>Description</th></tr>
+    <tr><td><code>class</code>, <code>cls</code></td><td>Class</td></tr>
+    <tr><td><code>section</code>, <code>sec</code></td><td>Section</td></tr>
+    <tr><td><code>subjectCode</code>, <code>subcode</code>, <code>code</code></td><td>3-digit CBSE subject code</td></tr>
+    <tr><td><code>subjectName</code>, <code>subject</code></td><td>Subject name</td></tr>
+    <tr><td><code>teacherName</code>, <code>teacher</code></td><td>Teacher name</td></tr>
+    <tr><td><code>department</code>, <code>dept</code></td><td>Department</td></tr>
+    <tr><td><code>teacherId</code>, <code>staffid</code>, <code>employeeid</code></td><td>Teacher ID</td></tr>
+  </table>
+  <p>Click <strong>"Upload Teacher Mapping"</strong> to load. A template is available for download.</p>
+
+  <h3>Performance Marks (Internal / Practical)</h3>
+  <p>Upload internal assessment or practical marks. These are used to derive theory marks from the gazette total marks.</p>
+  <ul class="feature-list">
+    <li>Select <strong>"Internal Marks"</strong> or <strong>"Practical Marks"</strong> from the dropdown.</li>
+    <li>Upload an Excel file with columns for <code>rollNo</code>, <code>class</code>, <code>subjectCode</code>, <code>componentMarks</code>, and <code>componentMaxMarks</code>.</li>
+    <li>The app automatically derives theory marks (<code>total &minus; component</code>) for enriched analysis.</li>
+    <li>A rich upload report shows matched, missing, and duplicate rows.</li>
+  </ul>
+</div>
+
+<!-- ─── DASHBOARD TABS ─── -->
+<h2>Dashboard Tabs</h2>
+
+<div class="section-card">
+  <h3>Summary</h3>
+  <p><span class="tag tag-gold">Single &amp; Multi-School</span></p>
+  <p>The summary tab provides a high-level overview:</p>
+  <ul class="feature-list">
+    <li><strong>Result stripe</strong> &mdash; class badge, exam name, school info, and pass rate.</li>
+    <li><strong>Stat cards</strong> &mdash; total students, passed, compartment, absent, boys/girls breakdown.</li>
+    <li><strong>School topper card</strong> &mdash; top student with best-of-5-with-English score.</li>
+    <li><strong>Charts</strong> &mdash; result distribution (donut), boys vs girls pass % (bar), grade distribution (bar).</li>
+    <li><strong>Subject-wise breakdown table</strong> &mdash; per-subject pass/fail/absent counts.</li>
+  </ul>
+  <p>In multi-school mode, a comparison grid shows all schools side-by-side with topper info, core metrics table, and subject averages table.</p>
+</div>
+
+<div class="section-card">
+  <h3>Subjects</h3>
+  <p><span class="tag tag-gold">Single School</span></p>
+  <p>Detailed subject performance analysis:</p>
+  <ul class="feature-list">
+    <li><strong>Analysis mode selector</strong> &mdash; switch between Total Marks, Theory Marks, or Internal/Practical Marks (when performance data is uploaded).</li>
+    <li><strong>Average marks chart</strong> &mdash; horizontal bar chart of subject averages.</li>
+    <li><strong>Marks distribution heat map</strong> &mdash; colour-coded grid showing percentage of students in each marks bucket per subject.</li>
+    <li><strong>Detailed breakdown table</strong> &mdash; total, absent, NA, applicable, failing, threshold %, average, max/min, and marks distribution per subject.</li>
+    <li><strong>Teacher detail toggle</strong> &mdash; expands each subject row to show teacher-level breakdowns with performance metrics per section.</li>
+  </ul>
+</div>
+
+<div class="section-card">
+  <h3>Merit List</h3>
+  <p><span class="tag tag-gold">Single &amp; Multi-School</span></p>
+  <p>Ranked list of PASS and COMP students with configurable scoring:</p>
+  <ul class="feature-list">
+    <li><strong>Scoring modes:</strong>
+      <ul>
+        <li><em>Best N with English</em> &mdash; top N subjects including English (default).</li>
+        <li><em>Best N (any subjects)</em> &mdash; top N subjects regardless of subject.</li>
+        <li><em>All Subjects</em> &mdash; percentage of total marks across all subjects.</li>
+      </ul>
+    </li>
+    <li><strong>N count</strong> &mdash; number of subjects to consider (default 5).</li>
+    <li><strong>English subject code</strong> &mdash; customise which subject code counts as English.</li>
+    <li><strong>Gender filter</strong> &mdash; all, boys only, or girls only.</li>
+    <li><strong>Show count</strong> &mdash; top 10, 25, 50, or all.</li>
+    <li><strong>Dense ranking</strong> &mdash; ties share the same rank number.</li>
+    <li><strong>Visual indicators</strong> &mdash; gold/silver/bronze for top 3, used subjects highlighted in marks display.</li>
+  </ul>
+  <p>In multi-school mode, students across selected schools are pooled into a single combined merit list with school and class labels.</p>
+</div>
+
+<div class="section-card">
+  <h3>Gender</h3>
+  <p><span class="tag tag-gold">Single School</span></p>
+  <p>Comparative analysis between boys and girls:</p>
+  <ul class="feature-list">
+    <li>Overall comparison cards showing student counts and pass percentages.</li>
+    <li>Pass % bar chart &mdash; boys vs girls.</li>
+    <li>Average total marks bar chart.</li>
+    <li>Subject-wise average comparison chart (boys vs girls).</li>
+    <li>Grade distribution bar charts for boys and girls separately.</li>
+  </ul>
+</div>
+
+<div class="section-card">
+  <h3>All Students</h3>
+  <p><span class="tag tag-gold">Single School</span></p>
+  <p>Searchable, filterable, sortable table of all students:</p>
+  <ul class="feature-list">
+    <li><strong>Search</strong> &mdash; type to filter by name or roll number.</li>
+    <li><strong>Result filter</strong> &mdash; all, pass, compartment, absent, or fail.</li>
+    <li><strong>Gender filter</strong> &mdash; all, boys, or girls.</li>
+    <li><strong>Sortable columns</strong> &mdash; click any column header to sort (roll no, name, result, total, %, individual subjects).</li>
+    <li><strong>"Export Excel"</strong> button &mdash; downloads the current filtered and sorted view as a formatted Excel file.</li>
+  </ul>
+</div>
+
+<div class="section-card">
+  <h3>Section Review</h3>
+  <p><span class="tag tag-teal">Requires Student Master upload</span></p>
+  <p>Board-result review grouped by section and class teacher:</p>
+  <ul class="feature-list">
+    <li>Sections listed with their class teachers.</li>
+    <li>Per-section stats: total students, pass %, compartment count, fail, absent.</li>
+    <li>Average total marks and section topper.</li>
+    <li>Weakest subjects identified per section.</li>
+    <li>All columns are sortable.</li>
+  </ul>
+</div>
+
+<div class="section-card">
+  <h3>Teacher Review</h3>
+  <p><span class="tag tag-teal">Requires Teacher Mapping upload</span></p>
+  <p>Board-result review by subject teacher across sections:</p>
+  <ul class="feature-list">
+    <li>Analysis mode selector (Total / Theory / Component marks).</li>
+    <li>Teacher, department, subject, section, taught count.</li>
+    <li>Threshold %, average, school average, variance.</li>
+    <li>Distinction and low-performer counts.</li>
+    <li>All columns are sortable.</li>
+  </ul>
+</div>
+
+<div class="section-card">
+  <h3>Follow-Up</h3>
+  <p><span class="tag tag-gold">Single School</span></p>
+  <p>Post-result tracking for compartment, fail, and absent students:</p>
+  <ul class="feature-list">
+    <li>Auto-lists students needing attention (COMP, Grade E subjects).</li>
+    <li>For each student: weak subjects identified.</li>
+    <li><strong>Status</strong> dropdown &mdash; Pending, Reviewed, Parent Meeting Done, Supplementary Prep Started, Closed.</li>
+    <li><strong>Owner</strong> &mdash; assign a staff member.</li>
+    <li><strong>Remarks</strong> &mdash; free-text notes.</li>
+    <li>All changes are auto-saved in real-time to the server or localStorage.</li>
+  </ul>
+</div>
+
+<!-- ─── SCORING ─── -->
+<h2>Scoring System</h2>
+<div class="section-card">
+  <p>The dashboard uses CBSE's official pass-mark calculation: <code>Math.round(maxMarks &times; 0.33)</code>.</p>
+  <table>
+    <tr><th>Max Marks</th><th>Pass Threshold</th></tr>
+    <tr><td>100</td><td>33</td></tr>
+    <tr><td>80</td><td>26</td></tr>
+    <tr><td>70</td><td>23</td></tr>
+    <tr><td>50</td><td>17</td></tr>
+    <tr><td>30</td><td>10</td></tr>
+    <tr><td>20</td><td>7</td></tr>
+  </table>
+  <p>For the merit list, the default scoring method is <strong>"Best N with English"</strong> (best 5 subjects including English), matching CBSE's standard merit ranking approach. The scoring is fully configurable via the settings panel on the Merit tab.</p>
+
+  <h3>Performance Analysis Modes</h3>
+  <p>When performance marks have been uploaded, the Subjects and Teacher Review tabs offer three analysis modes:</p>
+  <ul class="feature-list">
+    <li><strong>Total Marks</strong> &mdash; the gazette total out of 100 (no enrichment).</li>
+    <li><strong>Theory Marks</strong> &mdash; derived as total &minus; component marks.</li>
+    <li><strong>Internal / Practical Marks</strong> &mdash; the uploaded component marks.</li>
+  </ul>
+  <p>When theory or component modes are active, all pass thresholds, averages, and distributions use those marks instead of the total.</p>
+</div>
+
+<!-- ─── SUBJECT CODES ─── -->
+<h2>Subject Code Reference</h2>
+<div class="section-card">
+  <p>The app includes a built-in map of CBSE subject codes to names. Key codes include:</p>
+  <table>
+    <tr><th>Code</th><th>Class X</th><th>Code</th><th>Class XII</th></tr>
+    <tr><td>184</td><td>English Lang. &amp; Lit.</td><td>301</td><td>English Core</td></tr>
+    <tr><td>041</td><td>Mathematics (Standard)</td><td>041</td><td>Mathematics</td></tr>
+    <tr><td>241</td><td>Mathematics (Basic)</td><td>241</td><td>Applied Mathematics</td></tr>
+    <tr><td>086</td><td>Science</td><td>042</td><td>Physics</td></tr>
+    <tr><td>087</td><td>Social Science</td><td>043</td><td>Chemistry</td></tr>
+    <tr><td colspan="2"></td><td>044</td><td>Biology</td></tr>
+    <tr><td colspan="2"></td><td>083</td><td>Computer Science</td></tr>
+    <tr><td colspan="2"></td><td>065</td><td>Informatics Practices</td></tr>
+    <tr><td colspan="2"></td><td>054</td><td>Business Studies</td></tr>
+    <tr><td colspan="2"></td><td>055</td><td>Accountancy</td></tr>
+    <tr><td colspan="2"></td><td>030</td><td>Economics</td></tr>
+  </table>
+  <p>Full reference: Skill subjects (400-series for X, 800-series for XII) and languages (001-003, 085, 104-122 for X; 301-303, 104-122 for XII) are all included in the app's subject name lookup.</p>
+</div>
+
+<!-- ─── EXCEL EXPORT ─── -->
+<h2>Excel Export</h2>
+<div class="section-card">
+  <p><span class="tag tag-gold">Single &amp; Multi-School</span> <span class="tag tag-amber">Premium feature</span></p>
+  <p>Click <strong>"Export Excel"</strong> to download a formatted workbook. In single-school mode, the workbook contains:</p>
+  <ul class="feature-list">
+    <li><strong>Summary</strong> &mdash; overall results, gender summary, grade distribution, subject-wise breakdown (with colour-coded pass %).</li>
+    <li><strong>Class X / XII Subjects</strong> &mdash; subject-wise analysis with appeared/pass/fail, averages, and grade counts.</li>
+    <li><strong>Class X / XII Merit</strong> &mdash; all PASS students ranked by total marks with subject marks and grades (top 3 highlighted with medal colours).</li>
+    <li><strong>Gender Analysis</strong> &mdash; boys vs girls comparison tables and grade distributions.</li>
+  </ul>
+  <p>In multi-school mode, the export includes:</p>
+  <ul class="feature-list">
+    <li><strong>Comparison</strong> &mdash; school-by-school metrics.</li>
+    <li><strong>Subject Averages</strong> &mdash; per-subject averages across schools.</li>
+    <li><strong>Combined Merit</strong> &mdash; cross-school merit list (when viewed).</li>
+  </ul>
+  <p>From the All Students tab, the <strong>"Export Excel"</strong> button exports the currently filtered/sorted view as it appears on screen.</p>
+</div>
+
+<!-- ─── GAZETTE FILE FORMAT ─── -->
+<h2>Gazette File Format</h2>
+<div class="section-card">
+  <p>The app expects CBSE gazette TXT files with the following layout:</p>
+
+  <h3>Class X Format</h3>
+  <p>Each student record spans two lines:</p>
+  <ul class="feature-list">
+    <li><strong>Line 1:</strong> <code>ROLLNO GENDER NAME   SUBJECT_CODES    RESULT</code><br>
+    Example: <code>12345678 M STUDENT NAME   184 041 086 087 402   PASS</code></li>
+    <li><strong>Line 2:</strong> <code>   MARKS_OR_GRADES</code><br>
+    Example: <code>   89 95 92 78 85</code></li>
+  </ul>
+  <p>Result can be PASS, COMP (compartment), ABST (absent), or FAIL.</p>
+
+  <h3>Class XII Format</h3>
+  <p>Similar two-line structure but with grade codes between subject codes and result:</p>
+  <ul class="feature-list">
+    <li><strong>Line 1:</strong> <code>ROLLNO GENDER NAME   SUBJECT_CODES   GRADES   RESULT</code><br>
+    Example: <code>87654321 F STUDENT NAME   301 042 043 044 055   A1 B2 A2 B1 A1   PASS</code></li>
+    <li><strong>Line 2:</strong> <code>   MARKS</code><br>
+    Example: <code>   95 78 88 92 96</code></li>
+  </ul>
+  <p>The app gracefully handles files without explicit grade codes by inferring grades from marks.</p>
+
+  <h3>Auto-Detection</h3>
+  <p>The app detects the class from the file header text:</p>
+  <ul class="feature-list">
+    <li><strong>Class X:</strong> header contains "SECONDARY SCHOOL EXAMINATION"</li>
+    <li><strong>Class XII:</strong> header contains "SENIOR SCHOOL CERTIFICATE"</li>
+  </ul>
+</div>
+
+<!-- ─── KEYBOARD SHORTCUTS ─── -->
+<h2>Tips &amp; Shortcuts</h2>
+<div class="section-card">
+  <ul class="feature-list">
+    <li><strong>Drag &amp; drop</strong> TXT files directly onto the upload cards.</li>
+    <li>Use <strong>Enter</strong> in password fields on the login screen to submit.</li>
+    <li><strong>Mapping Excel files</strong> placed in the <code>static/mappings/</code> folder are auto-loaded when a session is opened (named <code>SCHOOLCODE-YEAR-student_master.xlsx</code> or <code>SCHOOLCODE-YEAR-teacher_mapping.xlsx</code>).</li>
+    <li>The <strong>storage indicator</strong> in the workspace panel shows how much localStorage space is used.</li>
+    <li>Use <strong>Backup</strong> regularly to export all your sessions as a JSON file for safekeeping.</li>
+    <li>In multi-school mode, the <strong>"Mixed Year"</strong> banner warns when selected schools span different exam years.</li>
+  </ul>
+</div>
+
+<hr>
+
+<footer>
+  CBSE Result Dashboard &middot; Built with Flask + Vanilla JS
+</footer>
+
+</div>
+</body>
+</html>
