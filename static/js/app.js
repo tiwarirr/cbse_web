@@ -781,7 +781,7 @@ function parseX(text){
 
   for(let i=0;i<lines.length;i++){
     const ln = lines[i];
-    const m = ln.match(/^(\d{8})\s+(F|M)\s+(.+?)\s{2,}((?:\d{3}\s+){4,6}\d{3})\s+(PASS|COMP|ABST|FAIL)/);
+    const m = ln.match(/^(\d{8})\s+(?:\S+\s+)?(F|M)\s+(.+?)\s{2,}((?:\d{3}\s+){4,6}\d{3})\s+(PASS|COMP|ABST|FAIL)/);
     if(!m) continue;
 
     diagnostics.matchedRows++;
@@ -819,8 +819,8 @@ function parseXII(text){
 
   for(let i=0;i<lines.length;i++){
     const ln = lines[i];
-    let m = ln.match(/^(\d{8})\s+(F|M)\s+(.+?)\s{2,}((?:\d{3}\s+){4,6}\d{3})\s+(?:A1|A2|B1|B2|C1|C2|D1|D2|E)\s+(?:A1|A2|B1|B2|C1|C2|D1|D2|E)\s+(?:A1|A2|B1|B2|C1|C2|D1|D2|E)\s+(PASS|COMP|ABST|FAIL)/);
-    if(!m) m = ln.match(/^(\d{8})\s+(F|M)\s+(.+?)\s{2,}((?:\d{3}\s+){4,6}\d{3})\s+.{0,50}?(ABST|PASS|COMP|FAIL)\b/);
+    let m = ln.match(/^(\d{8})\s+(?:\S+\s+)?(F|M)\s+(.+?)\s{2,}((?:\d{3}\s+){4,6}\d{3})\s+(?:A1|A2|B1|B2|C1|C2|D1|D2|E)\s+(?:A1|A2|B1|B2|C1|C2|D1|D2|E)\s+(?:A1|A2|B1|B2|C1|C2|D1|D2|E)\s+(PASS|COMP|ABST|FAIL)/);
+    if(!m) m = ln.match(/^(\d{8})\s+(?:\S+\s+)?(F|M)\s+(.+?)\s{2,}((?:\d{3}\s+){4,6}\d{3})\s+.{0,50}?(ABST|PASS|COMP|FAIL)\b/);
     if(!m) continue;
 
     diagnostics.matchedRows++;
