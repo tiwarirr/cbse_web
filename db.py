@@ -666,6 +666,15 @@ def list_combinations(user=None):
     } for r in rows]
 
 
+def reset_all_data():
+    """Wipe all school result data. User accounts and permissions are left intact."""
+    conn = get_db()
+    for table in ('sessions', 'student_master', 'teacher_mapping', 'follow_up', 'performance_marks', 'combinations'):
+        conn.execute(f'DELETE FROM {table}')
+    conn.commit()
+    conn.close()
+
+
 # ── Users & Authentication ────────────────────────────────────
 
 def normalize_role(role):

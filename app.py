@@ -233,6 +233,13 @@ def admin_delete_user(username):
     return jsonify({'status': 'success', 'message': f'User {username} deleted'})
 
 
+@app.route('/api/admin/reset-data', methods=['POST'])
+@admin_required
+def admin_reset_data():
+    db.reset_all_data()
+    return jsonify({'status': 'success', 'message': 'All school data has been wiped from the database.'})
+
+
 # ── Mapping files (Excel auto-load) ───────────────────────────
 
 @app.route('/api/mappings/<path:filename>')

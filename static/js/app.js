@@ -1742,6 +1742,29 @@ async function clearSavedData(){
   location.reload();
 }
 
+async function resetAllData(){
+  const confirmText = prompt('This will permanently erase ALL saved schools, master data, follow-ups and combinations for every user, and clear this browser\'s local storage. This cannot be undone.\n\nType RESET to confirm.');
+  if(confirmText !== 'RESET') return;
+
+  if(Store.mode === 'api'){
+    try{
+      const r = await fetch('/api/admin/reset-data', { method: 'POST' });
+      if(!r.ok){
+        const body = await r.json().catch(() => ({}));
+        alert(body.error || 'Failed to reset database.');
+        return;
+      }
+    }catch(err){
+      alert('Failed to reset database. Please check your connection and try again.');
+      return;
+    }
+  }
+
+  localStorage.clear();
+  alert('Database and local storage have been cleared.');
+  location.reload();
+}
+
 function collectSavedSessions(){
   return Object.values(schoolSessions).sort((a,b)=>{
     const yearDiff = String(b.year).localeCompare(String(a.year));
