@@ -5721,3 +5721,15 @@ function exportExamComparison(){
   const schoolTag = (currentExamComparison.sessionA.schoolCode || 'CBSE').replace(/\s+/g, '_');
   XLSX.writeFile(wb, `CBSE_ExamComparison_${schoolTag}_${cls}_${currentExamComparison.sessionA.year}.xlsx`);
 }
+
+// Let any modal be dismissed by clicking its backdrop or pressing Escape,
+// so a tall modal (e.g. exam comparison) is never stuck open past the viewport.
+document.addEventListener('click', (e) => {
+  if(e.target.classList?.contains('modal-overlay')) e.target.style.display = 'none';
+});
+document.addEventListener('keydown', (e) => {
+  if(e.key !== 'Escape') return;
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    if(getComputedStyle(overlay).display !== 'none') overlay.style.display = 'none';
+  });
+});

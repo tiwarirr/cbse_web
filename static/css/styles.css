@@ -1747,6 +1747,8 @@ tbody td { padding:9px 12px; }
   border-radius: 20px;
   width: 100%;
   max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
   padding: 32px;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border);
