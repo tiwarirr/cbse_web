@@ -5396,7 +5396,6 @@ function refreshExamCompareOptions(){
   const selA = document.getElementById('ec-session-a');
   const selB = document.getElementById('ec-session-b');
   const errEl = document.getElementById('exam-compare-error');
-  document.getElementById('exam-compare-results').innerHTML = '';
 
   const optionsHtml = sessions.map(session =>
     `<option value="${escapeAttr(session.sessionId)}">${escapeHtml(examCompareOptionLabel(session, cls))}</option>`
@@ -5414,7 +5413,6 @@ function refreshExamCompareOptions(){
 
 function openExamCompareModal(){
   document.getElementById('exam-compare-modal').style.display = 'flex';
-  document.getElementById('exam-compare-results').innerHTML = '';
   refreshExamCompareOptions();
 }
 
@@ -5492,28 +5490,10 @@ function computeExamComparisonRows(studentsA, studentsB){
   });
 }
 
-function renderExamComparison(){
-  const cls = document.getElementById('ec-class').value;
-  const sidA = document.getElementById('ec-session-a').value;
-  const sidB = document.getElementById('ec-session-b').value;
-  const errEl = document.getElementById('exam-compare-error');
-  const resultsEl = document.getElementById('exam-compare-results');
-
-  if(!sidA || !sidB){
-    errEl.textContent = 'Select two exam attempts to compare.';
-    return;
-  }
-  if(sidA === sidB){
-    errEl.textContent = 'Choose two different exam attempts to compare.';
-    return;
-  }
+function computeExamComparisonData(cls, sidA, sidB){
   const sessionA = schoolSessions[sidA];
   const sessionB = schoolSessions[sidB];
-  if(!sessionA?.classes?.[cls] || !sessionB?.classes?.[cls]){
-    errEl.textContent = 'Selected attempts no longer have data for this class.';
-    return;
-  }
-  errEl.textContent = '';
+  if(!sessionA?.classes?.[cls] || !sessionB?.classes?.[cls]) return null;
 
   const studentsA = sessionA.classes[cls].students;
   const studentsB = sessionB.classes[cls].students;
@@ -5523,15 +5503,19 @@ function renderExamComparison(){
   const statsA = computeExamAggregateStats(studentsA);
   const statsB = computeExamAggregateStats(studentsB);
   const subjectAverages = computeExamSubjectAverages(studentsA, studentsB);
+  const changeRows = rows.filter(r => (r.inA && r.inB && r.resultA !== r.resultB) || !r.inA || !r.inB);
+
+  return {cls, sessionA, sessionB, labelA, labelB, statsA, statsB, subjectAverages, rows, changeRows};
+}
+
+function buildExamComparisonHtml(data){
+  const {labelA, labelB, statsA, statsB, subjectAverages, rows, changeRows} = data;
 
   const improved = rows.filter(r => r.totalDelta !== null && r.totalDelta > 0).length;
   const declined = rows.filter(r => r.totalDelta !== null && r.totalDelta < 0).length;
   const unchanged = rows.filter(r => r.totalDelta === 0).length;
   const onlyInA = rows.filter(r => r.inA && !r.inB).length;
   const onlyInB = rows.filter(r => !r.inA && r.inB).length;
-  const changeRows = rows.filter(r => (r.inA && r.inB && r.resultA !== r.resultB) || !r.inA || !r.inB);
-
-  currentExamComparison = {cls, sessionA, sessionB, labelA, labelB, statsA, statsB, subjectAverages, rows, changeRows};
 
   const summaryHtml = `
     <div class="master-status" style="margin-bottom:12px;">
@@ -5568,7 +5552,7 @@ function renderExamComparison(){
 
   const subjectAvgHtml = `
     <h3 style="margin:16px 0 8px;font-size:14px;">Subject-wise Averages</h3>
-    <div class="tbl-wrap" style="max-height:260px;overflow:auto;">
+    <div class="tbl-wrap">
       <table>
         <thead><tr><th>Subject</th><th>Code</th><th>Avg A</th><th>Avg B</th><th>Δ</th><th>Pass % A</th><th>Pass % B</th></tr></thead>
         <tbody>${subjectAverages.map(sub => {
@@ -5588,7 +5572,7 @@ function renderExamComparison(){
 
   const changeReportHtml = `
     <h3 style="margin:16px 0 8px;font-size:14px;">Change Report <span style="font-weight:400;font-size:12px;color:var(--muted,#888)">(result status changed, or only appears in one attempt)</span></h3>
-    ${changeRows.length ? `<div class="tbl-wrap" style="max-height:260px;overflow:auto;">
+    ${changeRows.length ? `<div class="tbl-wrap">
       <table>
         <thead><tr><th>Roll No</th><th>Name</th><th>Change</th><th>Result (A → B)</th><th>Total (A→B)</th></tr></thead>
         <tbody>${changeRows.map(row => {
@@ -5625,17 +5609,16 @@ function renderExamComparison(){
     </tr>`;
   }).join('');
 
-  resultsEl.innerHTML = `
+  return `
     ${summaryHtml}
-    <div style="font-size:12px;color:var(--muted,#888);margin-bottom:8px;">
+    <div style="font-size:12px;color:#777;margin-bottom:8px;">
       <strong>A:</strong> ${escapeHtml(labelA)} &nbsp;&middot;&nbsp; <strong>B:</strong> ${escapeHtml(labelB)}
     </div>
-    <button class="btn-export" style="display:inline-block;margin-bottom:8px;" onclick="exportExamComparison()">Export to Excel</button>
     ${summaryStatsHtml}
     ${subjectAvgHtml}
     ${changeReportHtml}
     <h3 style="margin:16px 0 8px;font-size:14px;">Student-wise Comparison</h3>
-    <div class="tbl-wrap" style="max-height:420px;overflow:auto;">
+    <div class="tbl-wrap">
       <table>
         <thead>
           <tr>
@@ -5649,6 +5632,61 @@ function renderExamComparison(){
         <tbody>${tableRows}</tbody>
       </table>
     </div>`;
+}
+
+function openExamComparisonTab(){
+  const cls = document.getElementById('ec-class').value;
+  const sidA = document.getElementById('ec-session-a').value;
+  const sidB = document.getElementById('ec-session-b').value;
+  const errEl = document.getElementById('exam-compare-error');
+
+  if(!sidA || !sidB){
+    errEl.textContent = 'Select two exam attempts to compare.';
+    return;
+  }
+  if(sidA === sidB){
+    errEl.textContent = 'Choose two different exam attempts to compare.';
+    return;
+  }
+
+  const data = computeExamComparisonData(cls, sidA, sidB);
+  if(!data){
+    errEl.textContent = 'Selected attempts no longer have data for this class.';
+    return;
+  }
+  errEl.textContent = '';
+  currentExamComparison = data;
+
+  const win = window.open('', '_blank');
+  if(!win){
+    errEl.textContent = 'Please allow pop-ups for this site to open the comparison in a new tab.';
+    return;
+  }
+
+  const schoolLabel = data.sessionA.schoolName || data.sessionA.schoolCode;
+  const title = `Exam Comparison - ${schoolLabel} ${data.sessionA.year}`;
+  const bodyHtml = buildExamComparisonHtml(data);
+  win.document.open();
+  win.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<link rel="stylesheet" href="/static/css/fonts.css">
+<link rel="stylesheet" href="/static/css/styles.css">
+<style>
+  body{padding:28px 32px;max-width:1200px;margin:0 auto;}
+  h1{font-family:'DM Serif Display',serif;font-size:26px;margin-bottom:4px;}
+  h1 + p{color:#777;font-size:13px;margin-bottom:20px;}
+</style>
+</head>
+<body>
+<h1>Exam Attempt Comparison</h1>
+<p>${escapeHtml(schoolLabel)} &middot; Class ${escapeHtml(data.cls)} &middot; ${escapeHtml(String(data.sessionA.year))}</p>
+${bodyHtml}
+</body>
+</html>`);
+  win.document.close();
 }
 
 function exportExamComparison(){

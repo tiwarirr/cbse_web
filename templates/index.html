@@ -345,9 +345,9 @@
 
 <!-- Exam Attempt Comparison Modal -->
 <div id="exam-compare-modal" class="modal-overlay" style="display:none">
-  <div class="modal-box" style="max-width:1100px; width:95vw;">
+  <div class="modal-box" style="max-width:680px;">
     <h2>Compare Exam Attempts</h2>
-    <p>Compare the same students across two exam attempts of the same school, year and class (e.g. Exam 1 vs Exam 2, or Main vs Supplementary).</p>
+    <p>Compare the same students across two exam attempts of the same school, year and class (e.g. Exam 1 vs Exam 2, or Main vs Supplementary). The report opens in a new tab.</p>
     <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:12px;">
       <div class="form-field">
         <label for="ec-class">Class</label>
@@ -364,14 +364,12 @@
         <label for="ec-session-b">Attempt B</label>
         <select id="ec-session-b" class="workspace-select" style="width:100%; min-height:38px; border-radius:10px; padding:4px 8px;"></select>
       </div>
-      <div class="form-field" style="display:flex; align-items:flex-end;">
-        <button class="btn-export" style="display:block; width:100%; border-radius:10px; padding:10px;" onclick="renderExamComparison()">Compare</button>
-      </div>
     </div>
     <div id="exam-compare-error" class="login-error" style="color:var(--red); font-size:12px; margin-top:8px;"></div>
-    <div id="exam-compare-results" style="margin-top:16px;"></div>
-    <div class="modal-actions" style="margin-top:20px; display:flex; justify-content:flex-end;">
+    <div class="modal-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
       <button class="btn-clear" style="display:block;" onclick="closeExamCompareModal()">Close</button>
+      <button class="btn-restore-json" style="display:block;" onclick="exportExamComparison()">Export to Excel</button>
+      <button class="btn-export" style="display:block;" onclick="openExamComparisonTab()">Open Comparison in New Tab</button>
     </div>
   </div>
 </div>
