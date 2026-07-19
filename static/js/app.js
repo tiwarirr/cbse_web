@@ -5431,11 +5431,11 @@ function computeExamAggregateStats(students){
   return {n: stats.n, pass: stats.pass, comp: stats.comp, abst: stats.abst, fail, pct: Number(stats.pct), avgTotal: Number(avgTotal.toFixed(1))};
 }
 
-function computeExamSubjectAverages(studentsA, studentsB){
+function computeExamSubjectAverages(studentsA, studentsB, rows){
   const byCode = new Map();
   const collect = (students, side) => {
     students.forEach(student => student.subjects.forEach(sub => {
-      if(!byCode.has(sub.code)) byCode.set(sub.code, {code: sub.code, name: sub.name, marksA: [], marksB: [], passA: 0, totalA: 0, passB: 0, totalB: 0});
+      if(!byCode.has(sub.code)) byCode.set(sub.code, {code: sub.code, name: sub.name, marksA: [], marksB: [], passA: 0, totalA: 0, passB: 0, totalB: 0, grossChange: 0});
       const entry = byCode.get(sub.code);
       if(sub.grade !== 'AB') entry[side === 'A' ? 'marksA' : 'marksB'].push(sub.marks);
       entry[side === 'A' ? 'totalA' : 'totalB']++;
@@ -5444,14 +5444,23 @@ function computeExamSubjectAverages(studentsA, studentsB){
   };
   collect(studentsA, 'A');
   collect(studentsB, 'B');
+  // Gross change is summed from matched per-student deltas (rows), not the
+  // unpaired marksA/marksB lists above, so it only counts students present
+  // in both attempts.
+  rows.forEach(row => row.subjects.forEach(sub => {
+    if(sub.delta === null) return;
+    const entry = byCode.get(sub.code);
+    if(entry) entry.grossChange += sub.delta;
+  }));
   return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)).map(entry => {
     const avgA = entry.marksA.length ? avg(entry.marksA) : null;
     const avgB = entry.marksB.length ? avg(entry.marksB) : null;
     return {
       code: entry.code, name: entry.name,
-      avgA: avgA !== null ? Number(avgA.toFixed(1)) : null,
-      avgB: avgB !== null ? Number(avgB.toFixed(1)) : null,
-      delta: (avgA !== null && avgB !== null) ? Number((avgB - avgA).toFixed(1)) : null,
+      avgA: avgA !== null ? Number(avgA.toFixed(4)) : null,
+      avgB: avgB !== null ? Number(avgB.toFixed(4)) : null,
+      delta: (avgA !== null && avgB !== null) ? Number((avgB - avgA).toFixed(4)) : null,
+      grossChange: entry.grossChange,
       passPctA: entry.totalA ? Number(((entry.passA / entry.totalA) * 100).toFixed(1)) : null,
       passPctB: entry.totalB ? Number(((entry.passB / entry.totalB) * 100).toFixed(1)) : null,
     };
@@ -5502,7 +5511,7 @@ function computeExamComparisonData(cls, sidA, sidB){
   const labelB = examCompareOptionLabel(sessionB, cls);
   const statsA = computeExamAggregateStats(studentsA);
   const statsB = computeExamAggregateStats(studentsB);
-  const subjectAverages = computeExamSubjectAverages(studentsA, studentsB);
+  const subjectAverages = computeExamSubjectAverages(studentsA, studentsB, rows);
   const changeRows = rows.filter(r => (r.inA && r.inB && r.resultA !== r.resultB) || !r.inA || !r.inB);
 
   return {cls, sessionA, sessionB, labelA, labelB, statsA, statsB, subjectAverages, rows, changeRows};
@@ -5554,15 +5563,17 @@ function buildExamComparisonHtml(data){
     <h3 style="margin:16px 0 8px;font-size:14px;">Subject-wise Averages</h3>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Subject</th><th>Code</th><th>Avg A</th><th>Avg B</th><th>Δ</th><th>Pass % A</th><th>Pass % B</th></tr></thead>
+        <thead><tr><th>Subject</th><th>Code</th><th>Avg A</th><th>Avg B</th><th>Δ</th><th>Gross Change</th><th>Pass % A</th><th>Pass % B</th></tr></thead>
         <tbody>${subjectAverages.map(sub => {
           const color = sub.delta > 0 ? 'var(--green,#1a7f37)' : sub.delta < 0 ? 'var(--red,#c0392b)' : 'inherit';
+          const grossColor = sub.grossChange > 0 ? 'var(--green,#1a7f37)' : sub.grossChange < 0 ? 'var(--red,#c0392b)' : 'inherit';
           return `<tr>
             <td>${escapeHtml(sub.name)}</td>
             <td>${escapeHtml(sub.code)}</td>
             <td>${sub.avgA ?? '—'}</td>
             <td>${sub.avgB ?? '—'}</td>
             <td style="color:${color};font-weight:700">${sub.delta === null ? '—' : (sub.delta > 0 ? `+${sub.delta}` : sub.delta)}</td>
+            <td style="color:${grossColor};font-weight:700">${sub.grossChange > 0 ? `+${sub.grossChange}` : sub.grossChange}</td>
             <td>${sub.passPctA ?? '—'}${sub.passPctA !== null ? '%' : ''}</td>
             <td>${sub.passPctB ?? '—'}${sub.passPctB !== null ? '%' : ''}</td>
           </tr>`;
@@ -5719,10 +5730,10 @@ function exportExamComparison(){
   summarySheet['!cols'] = [{wch:28}, {wch:20}, {wch:20}];
   XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-  const subjectRows = [['Subject', 'Code', 'Avg A', 'Avg B', 'Delta', 'Pass % A', 'Pass % B']];
-  subjectAverages.forEach(sub => subjectRows.push([sub.name, sub.code, sub.avgA, sub.avgB, sub.delta, sub.passPctA, sub.passPctB]));
+  const subjectRows = [['Subject', 'Code', 'Avg A', 'Avg B', 'Delta', 'Gross Change', 'Pass % A', 'Pass % B']];
+  subjectAverages.forEach(sub => subjectRows.push([sub.name, sub.code, sub.avgA, sub.avgB, sub.delta, sub.grossChange, sub.passPctA, sub.passPctB]));
   const subjectSheet = XLSX.utils.aoa_to_sheet(subjectRows);
-  subjectSheet['!cols'] = [{wch:28}, {wch:8}, {wch:10}, {wch:10}, {wch:10}, {wch:10}, {wch:10}];
+  subjectSheet['!cols'] = [{wch:28}, {wch:8}, {wch:10}, {wch:10}, {wch:10}, {wch:12}, {wch:10}, {wch:10}];
   XLSX.utils.book_append_sheet(wb, subjectSheet, 'Subject Averages');
 
   const changeSheetRows = [['Roll No', 'Name', 'Change', 'Result A', 'Result B', 'Total A', 'Total B', 'Total Delta']];
