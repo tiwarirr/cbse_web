@@ -878,6 +878,10 @@ header {
   background:var(--gold);
   color:var(--ink);
 }
+.session-delete {
+  background:var(--red);
+  color:#fff;
+}
 .combo-open {
   background:var(--cxii);
   color:#fff;

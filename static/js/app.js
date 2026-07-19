@@ -291,6 +291,7 @@ const Store = {
   },
 
   async saveSession(session){
+    const examLabel = normalizeExamLabel(session.examLabel);
     if(this.mode === 'api'){
       for(const cls of ['X','XII']){
         const bundle = session.classes[cls];
@@ -304,14 +305,17 @@ const Store = {
             year: session.year,
             cls,
             rawText: bundle.rawText,
+            examLabel,
+            examDate: bundle.examDate || '',
           }),
         });
         if (r.status === 401) { this.user = null; syncUserUI(); return; }
       }
     } else {
+      const suffix = examLabel === DEFAULT_EXAM_LABEL ? '' : `--${slugifyExamLabel(examLabel)}`;
       ['X','XII'].forEach(cls => {
         const bundle = session.classes[cls];
-        if(bundle) localStorage.setItem(`${session.schoolCode}-${session.year}-${cls}`, bundle.rawText);
+        if(bundle) localStorage.setItem(`${session.schoolCode}-${session.year}-${cls}${suffix}`, bundle.rawText);
       });
     }
   },
@@ -325,30 +329,34 @@ const Store = {
         const list = await r.json();
         const grouped = {};
         list.forEach(item => {
-          const sid = createSessionId(item.schoolCode, item.year, item.ownerUserId);
+          const sid = createSessionId(item.schoolCode, item.year, item.examLabel, item.ownerUserId);
           if(!grouped[sid]) grouped[sid] = {
             X:null,
             XII:null,
+            examDates:{},
             schoolCode:item.schoolCode,
             schoolName:item.schoolName,
             year:item.year,
+            examLabel:item.examLabel || DEFAULT_EXAM_LABEL,
             ownerUserId:item.ownerUserId,
             ownerUsername:item.ownerUsername,
           };
           grouped[sid][item.cls] = item.rawText;
+          grouped[sid].examDates[item.cls] = item.examDate || '';
         });
         return grouped;
       } catch { return {}; }
     } else {
-      const pattern = /^(.+)-(\d{4})-(X|XII)$/;
+      const pattern = /^(.+)-(\d{4})-(X|XII)(?:--([a-z0-9-]+))?$/;
       const grouped = {};
       for(let i=0;i<localStorage.length;i++){
         const key = localStorage.key(i);
         const match = key && key.match(pattern);
         if(!match) continue;
-        const [, schoolCode, year, cls] = match;
-        const sid = createSessionId(schoolCode, year);
-        if(!grouped[sid]) grouped[sid] = {X:null, XII:null};
+        const [, schoolCode, year, cls, labelSlug] = match;
+        const examLabel = labelSlug || DEFAULT_EXAM_LABEL;
+        const sid = createSessionId(schoolCode, year, examLabel);
+        if(!grouped[sid]) grouped[sid] = {X:null, XII:null, examDates:{}, schoolCode, year, examLabel};
         grouped[sid][cls] = localStorage.getItem(key);
       }
       return grouped;
@@ -361,7 +369,28 @@ const Store = {
       const r = await fetch(`/api/sessions/${schoolCode}/${year}${this.ownerQuery(session)}`, {method:'DELETE'});
       if (r.status === 401) { this.user = null; syncUserUI(); return; }
     } else {
-      ['X','XII'].forEach(cls => localStorage.removeItem(`${schoolCode}-${year}-${cls}`));
+      ['X','XII'].forEach(cls => {
+        localStorage.removeItem(`${schoolCode}-${year}-${cls}`);
+        const prefix = `${schoolCode}-${year}-${cls}--`;
+        for(let i = localStorage.length - 1; i >= 0; i--){
+          const key = localStorage.key(i);
+          if(key && key.startsWith(prefix)) localStorage.removeItem(key);
+        }
+      });
+    }
+  },
+
+  async deleteSessionAttempt(schoolCode, year, cls, examLabel, sessionRef=null){
+    if(this.mode === 'api'){
+      const r = await fetch(`/api/sessions/${schoolCode}/${year}/attempt${this.ownerQuery(sessionRef)}`, {
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({cls, examLabel}),
+      });
+      if (r.status === 401) { this.user = null; syncUserUI(); return; }
+    } else {
+      const suffix = normalizeExamLabel(examLabel) === DEFAULT_EXAM_LABEL ? '' : `--${slugifyExamLabel(examLabel)}`;
+      localStorage.removeItem(`${schoolCode}-${year}-${cls}${suffix}`);
     }
   },
 
@@ -554,9 +583,23 @@ function createEmptyMasterData(){
   };
 }
 
-function createSessionId(schoolCode, year, ownerUserId){
+const DEFAULT_EXAM_LABEL = 'Main';
+
+function slugifyExamLabel(label){
+  return String(label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function normalizeExamLabel(label){
+  return String(label || '').trim() || DEFAULT_EXAM_LABEL;
+}
+
+// Sessions tagged with the default label keep the original id shape (schoolCode-year[-uOwner])
+// so existing saved combinations / backups made before exam attempts existed keep resolving.
+function createSessionId(schoolCode, year, examLabel, ownerUserId){
   const base = `${schoolCode || 'CBSE'}-${year || new Date().getFullYear()}`;
-  return ownerUserId ? `${base}-u${ownerUserId}` : base;
+  const slug = slugifyExamLabel(examLabel);
+  const withLabel = (slug && slug !== slugifyExamLabel(DEFAULT_EXAM_LABEL)) ? `${base}-${slug}` : base;
+  return ownerUserId ? `${withLabel}-u${ownerUserId}` : withLabel;
 }
 
 function getSessionStorageKey(session, suffix){
@@ -701,6 +744,19 @@ function detectClass(text){
   return null;
 }
 
+function refreshExamLabelDates(){
+  const el = document.getElementById('exam-label-dates');
+  if(!el) return;
+  const parts = ['X','XII']
+    .filter(cls => uploadRaw[cls])
+    .map(cls => {
+      const meta = parseMeta(uploadRaw[cls]);
+      return meta.date ? `Class ${cls} file date: ${meta.date}` : '';
+    })
+    .filter(Boolean);
+  el.textContent = parts.join('  ·  ');
+}
+
 function readFile(file, c){
   if(!file) return;
   const r = new FileReader();
@@ -715,6 +771,7 @@ function readFile(file, c){
     el.style.color = actualClass==='X' ? 'var(--cx-dk)' : 'var(--cxii-dk)';
     document.getElementById('card-'+actualClass).className = 'upload-card loaded-'+actualClass;
     document.getElementById('btn-analyze').disabled = !(uploadRaw.X || uploadRaw.XII);
+    refreshExamLabelDates();
   };
   r.readAsText(file,'UTF-8');
 }
@@ -855,11 +912,13 @@ function parseMeta(t) {
   const yr = t.match(/EXAMINATION[^-\n]*[-\u2013](\d{4})/);
   const rg = t.match(/REGION\s*:\s*([A-Z][A-Z0-9 ]+?)(?:\s{2,}|\n|PAGE)/i);
   const sc = t.match(/SCHOOL\s*:\s*-\s*(\d+)\s+(.+)/i);
+  const dt = t.match(/DATE\s*:-\s*(\d{2}-\d{2}-\d{4})/i);
   return {
     year: yr ? yr[1] : new Date().getFullYear(),
     region: rg ? rg[1].trim() : '',
     code: sc ? sc[1].trim() : '',
     school: sc ? sc[2].trim() : '',
+    date: dt ? dt[1] : '',
   };
 }
 
@@ -870,15 +929,17 @@ function parseClassBundle(cls, text){
     rawText: text,
     students: parsed.students,
     diagnostics: parsed.diagnostics,
+    examDate: parseMeta(text).date,
   };
 }
 
-function buildSessionFromRawClasses(classes){
+function buildSessionFromRawClasses(classes, examLabel){
   const sampleText = classes.X || classes.XII || '';
   const meta = parseMeta(sampleText);
   const schoolCode = meta.code || 'CBSE';
   const year = String(meta.year || new Date().getFullYear());
-  const sessionId = createSessionId(schoolCode, year);
+  const label = normalizeExamLabel(examLabel);
+  const sessionId = createSessionId(schoolCode, year, label);
   const classX = parseClassBundle('X', classes.X || null);
   const classXII = parseClassBundle('XII', classes.XII || null);
   return {
@@ -886,6 +947,7 @@ function buildSessionFromRawClasses(classes){
     schoolCode,
     schoolName: meta.school || schoolCode,
     year,
+    examLabel: label,
     masterData: createEmptyMasterData(),
     parsed: {
       X: classX ? classX.students.length : 0,
@@ -1059,13 +1121,13 @@ async function rebuildSessionsFromLocalStorage(){
     const session = buildSessionFromRawClasses({
       X: classes.X || null,
       XII: classes.XII || null,
-    });
+    }, classes.examLabel);
     // Carry over schoolName from server response if available
     if(classes.schoolName) session.schoolName = classes.schoolName;
     if(classes.ownerUserId) {
       session.ownerUserId = classes.ownerUserId;
       session.ownerUsername = classes.ownerUsername || '';
-      session.sessionId = createSessionId(session.schoolCode, session.year, classes.ownerUserId);
+      session.sessionId = createSessionId(session.schoolCode, session.year, session.examLabel, classes.ownerUserId);
     }
     const merged = mergeSessionIntoRegistry(session);
     merged.masterData = loadSessionMasterData(merged);  // sync: localStorage legacy
@@ -1678,7 +1740,25 @@ function renderParseWarnings(){
 
 async function runAnalysis(){
   const staged = {X: uploadRaw.X, XII: uploadRaw.XII};
-  const session = buildSessionFromRawClasses(staged);
+  const examLabelInput = document.getElementById('exam-label-input');
+  const examLabel = normalizeExamLabel(examLabelInput ? examLabelInput.value : '');
+
+  const sampleText = staged.X || staged.XII || '';
+  const previewMeta = parseMeta(sampleText);
+  const previewSessionId = createSessionId(previewMeta.code || 'CBSE', String(previewMeta.year || new Date().getFullYear()), examLabel);
+  const existingSession = schoolSessions[previewSessionId];
+  const overwritingClasses = ['X','XII'].filter(cls => staged[cls] && existingSession?.classes?.[cls]);
+  if(overwritingClasses.length){
+    const label = examLabel === DEFAULT_EXAM_LABEL ? 'existing' : `"${examLabel}"`;
+    const proceed = confirm(
+      `A ${label} attempt already exists for Class ${overwritingClasses.join(' & ')} of ` +
+      `${previewMeta.school || previewMeta.code || 'this school'} (${previewMeta.year}). ` +
+      `Uploading will overwrite it. Continue?`
+    );
+    if(!proceed) return;
+  }
+
+  const session = buildSessionFromRawClasses(staged, examLabel);
   const merged = mergeSessionIntoRegistry(session);
   await persistSchoolSession(merged);
 
@@ -1713,6 +1793,8 @@ async function runAnalysis(){
   resetCardState('X');
   resetCardState('XII');
   document.getElementById('btn-analyze').disabled = true;
+  if(examLabelInput) examLabelInput.value = DEFAULT_EXAM_LABEL;
+  refreshExamLabelDates();
 
   renderParseWarnings();
   renderWorkspacePanel();
@@ -1738,6 +1820,51 @@ async function clearSavedData(){
   savedCombinations = savedCombinations.filter(combo =>
     !combo.selectedSessionIds.some(id => removedIds.has(id))
   );
+  await persistSavedCombinations();
+  location.reload();
+}
+
+async function deleteSessionCard(sessionId){
+  const session = schoolSessions[sessionId];
+  if(!session) return;
+  const examLabel = normalizeExamLabel(session.examLabel);
+  const ownerNote = Store.user?.role === 'admin' && session.ownerUsername ? ` (uploaded by ${session.ownerUsername})` : '';
+  const labelNote = examLabel !== DEFAULT_EXAM_LABEL ? ` — ${examLabel}` : '';
+  const clsList = ['X','XII'].filter(cls => session.classes?.[cls]);
+
+  // If this owner has no other exam attempt for this school/year, also clean up the
+  // shared master data (student master, teacher mapping, follow-ups, performance marks)
+  // instead of leaving it orphaned. Otherwise only remove this specific attempt.
+  const siblingAttempts = Object.values(schoolSessions).filter(s =>
+    s.sessionId !== sessionId &&
+    s.schoolCode === session.schoolCode &&
+    String(s.year) === String(session.year) &&
+    (s.ownerUserId || null) === (session.ownerUserId || null)
+  );
+  const isLastAttempt = siblingAttempts.length === 0;
+  const scopeNote = isLastAttempt
+    ? ' This is the only saved attempt for this school/year, so student master, teacher mapping, follow-ups and performance marks will be removed too.'
+    : ' Other exam attempts and shared master data for this school/year will be kept.';
+
+  const proceed = confirm(
+    `Delete ${session.schoolName || session.schoolCode} · ${session.year}${labelNote}${ownerNote} (Class ${clsList.join(' & ') || '—'})?` +
+    scopeNote + ' This cannot be undone.'
+  );
+  if(!proceed) return;
+
+  if(isLastAttempt){
+    await Store.deleteSession(session.schoolCode, session.year, session);
+    clsList.forEach(cls => localStorage.removeItem(`${session.schoolCode}-${session.year}-${cls}`));
+    [STUDENT_MASTER_SUFFIX, TEACHER_MAPPING_SUFFIX, FOLLOW_UP_SUFFIX].forEach(suffix =>
+      localStorage.removeItem(getSessionStorageKey(session, suffix))
+    );
+  } else {
+    for(const cls of clsList){
+      await Store.deleteSessionAttempt(session.schoolCode, session.year, cls, examLabel, session);
+    }
+  }
+
+  savedCombinations = savedCombinations.filter(combo => !combo.selectedSessionIds.includes(sessionId));
   await persistSavedCombinations();
   location.reload();
 }
@@ -1788,6 +1915,7 @@ function exportBackup(){
     sessions: sessions.map(session => ({
       schoolCode: session.schoolCode,
       year: session.year,
+      examLabel: normalizeExamLabel(session.examLabel),
       classes: {
         ...(session.classes.X ? {X: session.classes.X.rawText} : {}),
         ...(session.classes.XII ? {XII: session.classes.XII.rawText} : {}),
@@ -1944,15 +2072,19 @@ function renderWorkspacePanel(){
 
   sessionList.innerHTML = sessions.length ? sessions.map(session => {
     const selected = workspaceState.selectedSessionIds.includes(session.sessionId);
+    const examLabel = normalizeExamLabel(session.examLabel);
+    const examBadge = examLabel !== DEFAULT_EXAM_LABEL
+      ? `<span class="cpill" style="background:#eef2ff;color:#4f46e5">${escapeHtml(examLabel)}</span>` : '';
     return `<div class="session-card ${selected ? 'selected' : ''}">
       <div class="session-meta">
         <div class="session-title">${getSessionLabel(session)}</div>
         <div class="session-sub">${session.schoolCode} | ${session.year}</div>
-        <div class="session-badges">${listSessionClassBadges(session)}</div>
+        <div class="session-badges">${listSessionClassBadges(session)} ${examBadge}</div>
       </div>
       <div class="session-actions">
         <button class="session-select" onclick="toggleSessionSelection('${session.sessionId}')">${selected ? 'Remove' : 'Select'}</button>
         <button class="session-open" onclick="openSingleSession('${session.sessionId}')">Open</button>
+        <button class="session-delete" onclick="deleteSessionCard('${session.sessionId}')">Delete</button>
       </div>
     </div>`;
   }).join('') : '<div class="workspace-empty">No saved schools yet.</div>';
@@ -2131,7 +2263,7 @@ function openSessionOverlay(config){
       <div style="font-size:16px;font-weight:800;font-family:'DM Mono',monospace">${i + 1}</div>
       <div class="import-session-info">
         <div class="import-session-name">${schoolName}</div>
-        <div class="import-session-meta">School ${session.schoolCode} &nbsp;&middot;&nbsp; ${session.year}</div>
+        <div class="import-session-meta">School ${session.schoolCode} &nbsp;&middot;&nbsp; ${session.year}${session.examLabel && normalizeExamLabel(session.examLabel) !== DEFAULT_EXAM_LABEL ? ' &nbsp;&middot;&nbsp; ' + escapeHtml(session.examLabel) : ''}</div>
         <div class="import-session-cls">${classBadges}</div>
       </div>
     </div>`;
@@ -2203,18 +2335,19 @@ function showRestoreBanner(message){
 }
 
 function restoreSession(session, source, restoredMasterData){
+  const examLabel = normalizeExamLabel(session.examLabel);
   const merged = mergeSessionIntoRegistry(buildSessionFromRawClasses({
     X: session.classes?.X?.rawText || session.classes?.X || null,
     XII: session.classes?.XII?.rawText || session.classes?.XII || null,
-  }));
+  }, examLabel));
   if(restoredMasterData){
     merged.masterData = {
       ...(merged.masterData || createEmptyMasterData()),
       ...restoredMasterData,
     };
   }
-  openSingleSession(createSessionId(session.schoolCode, session.year));
-  showRestoreBanner(`${source} - School ${session.schoolCode} | ${session.year}`);
+  openSingleSession(createSessionId(session.schoolCode, session.year, examLabel));
+  showRestoreBanner(`${source} - School ${session.schoolCode} | ${session.year}${examLabel !== DEFAULT_EXAM_LABEL ? ' | ' + examLabel : ''}`);
 }
 
 async function doImport(){
@@ -2238,6 +2371,7 @@ async function doImport(){
       const mockSession = {
         schoolCode: item.schoolCode, schoolName: item.schoolName || item.schoolCode,
         year: item.year,
+        examLabel: normalizeExamLabel(item.examLabel),
         classes: Object.fromEntries(
           Object.entries(item.classes).map(([cls, rawText]) => [cls, {rawText}])
         ),
@@ -5216,4 +5350,181 @@ function syncUserUI() {
     if(workspaceActions) workspaceActions.style.display = 'flex';
     syncPremiumControls();
   }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EXAM ATTEMPT COMPARISON
+   Compares the same students across two exam attempts (e.g. Exam 1
+   vs Exam 2, or Main vs Supplementary) of the same school/year/class.
+══════════════════════════════════════════════════════════════ */
+
+function sessionsWithClass(cls){
+  return Object.values(schoolSessions)
+    .filter(session => session.classes?.[cls])
+    .sort((a,b) => {
+      const schoolDiff = String(a.schoolCode).localeCompare(String(b.schoolCode));
+      if(schoolDiff) return schoolDiff;
+      const yearDiff = String(b.year).localeCompare(String(a.year));
+      if(yearDiff) return yearDiff;
+      return normalizeExamLabel(a.examLabel).localeCompare(normalizeExamLabel(b.examLabel));
+    });
+}
+
+function examCompareOptionLabel(session, cls){
+  const label = normalizeExamLabel(session.examLabel);
+  const date = session.classes?.[cls]?.examDate;
+  return `${session.schoolName || session.schoolCode} · ${session.year} · ${label}${date ? ' (' + date + ')' : ''}`;
+}
+
+function refreshExamCompareOptions(){
+  const cls = document.getElementById('ec-class').value;
+  const sessions = sessionsWithClass(cls);
+  const selA = document.getElementById('ec-session-a');
+  const selB = document.getElementById('ec-session-b');
+  const errEl = document.getElementById('exam-compare-error');
+  document.getElementById('exam-compare-results').innerHTML = '';
+
+  const optionsHtml = sessions.map(session =>
+    `<option value="${escapeAttr(session.sessionId)}">${escapeHtml(examCompareOptionLabel(session, cls))}</option>`
+  ).join('');
+  selA.innerHTML = optionsHtml;
+  selB.innerHTML = optionsHtml;
+
+  if(sessions.length < 2){
+    errEl.textContent = `Only ${sessions.length} exam attempt${sessions.length === 1 ? '' : 's'} found for Class ${cls}. Upload a second attempt (e.g. Exam 2 or Supplementary) to compare.`;
+  } else {
+    errEl.textContent = '';
+    selB.selectedIndex = Math.min(1, sessions.length - 1);
+  }
+}
+
+function openExamCompareModal(){
+  document.getElementById('exam-compare-modal').style.display = 'flex';
+  document.getElementById('exam-compare-results').innerHTML = '';
+  refreshExamCompareOptions();
+}
+
+function closeExamCompareModal(){
+  document.getElementById('exam-compare-modal').style.display = 'none';
+}
+
+function subjectTotal(student){
+  return (student?.subjects || []).reduce((sum, sub) => sum + (typeof sub.marks === 'number' ? sub.marks : 0), 0);
+}
+
+function computeExamComparisonRows(studentsA, studentsB){
+  const mapA = new Map(studentsA.map(s => [s.rollNo, s]));
+  const mapB = new Map(studentsB.map(s => [s.rollNo, s]));
+  const allRolls = [...new Set([...mapA.keys(), ...mapB.keys()])].sort();
+
+  return allRolls.map(rollNo => {
+    const a = mapA.get(rollNo) || null;
+    const b = mapB.get(rollNo) || null;
+    const subjA = new Map((a?.subjects || []).map(s => [s.code, s]));
+    const subjB = new Map((b?.subjects || []).map(s => [s.code, s]));
+    const allCodes = [...new Set([...subjA.keys(), ...subjB.keys()])].sort();
+    const subjects = allCodes.map(code => {
+      const sa = subjA.get(code) || null;
+      const sb = subjB.get(code) || null;
+      const delta = (sa && sb && typeof sa.marks === 'number' && typeof sb.marks === 'number') ? (sb.marks - sa.marks) : null;
+      return {code, name: sa?.name || sb?.name || sn(code, ''), a: sa, b: sb, delta};
+    });
+    const totalA = a ? subjectTotal(a) : null;
+    const totalB = b ? subjectTotal(b) : null;
+    return {
+      rollNo,
+      name: a?.name || b?.name || '',
+      inA: !!a, inB: !!b,
+      resultA: a?.result || '—',
+      resultB: b?.result || '—',
+      totalA, totalB,
+      totalDelta: (totalA !== null && totalB !== null) ? (totalB - totalA) : null,
+      subjects,
+    };
+  });
+}
+
+function renderExamComparison(){
+  const cls = document.getElementById('ec-class').value;
+  const sidA = document.getElementById('ec-session-a').value;
+  const sidB = document.getElementById('ec-session-b').value;
+  const errEl = document.getElementById('exam-compare-error');
+  const resultsEl = document.getElementById('exam-compare-results');
+
+  if(!sidA || !sidB){
+    errEl.textContent = 'Select two exam attempts to compare.';
+    return;
+  }
+  if(sidA === sidB){
+    errEl.textContent = 'Choose two different exam attempts to compare.';
+    return;
+  }
+  const sessionA = schoolSessions[sidA];
+  const sessionB = schoolSessions[sidB];
+  if(!sessionA?.classes?.[cls] || !sessionB?.classes?.[cls]){
+    errEl.textContent = 'Selected attempts no longer have data for this class.';
+    return;
+  }
+  errEl.textContent = '';
+
+  const rows = computeExamComparisonRows(sessionA.classes[cls].students, sessionB.classes[cls].students);
+  const labelA = examCompareOptionLabel(sessionA, cls);
+  const labelB = examCompareOptionLabel(sessionB, cls);
+
+  const improved = rows.filter(r => r.totalDelta !== null && r.totalDelta > 0).length;
+  const declined = rows.filter(r => r.totalDelta !== null && r.totalDelta < 0).length;
+  const unchanged = rows.filter(r => r.totalDelta === 0).length;
+  const onlyInA = rows.filter(r => r.inA && !r.inB).length;
+  const onlyInB = rows.filter(r => !r.inA && r.inB).length;
+  const resultChanged = rows.filter(r => r.inA && r.inB && r.resultA !== r.resultB).length;
+
+  const summaryHtml = `
+    <div class="master-status" style="margin-bottom:12px;">
+      <span class="master-chip">Improved <strong>${improved}</strong></span>
+      <span class="master-chip">Declined <strong>${declined}</strong></span>
+      <span class="master-chip">Unchanged total <strong>${unchanged}</strong></span>
+      <span class="master-chip">Result status changed <strong>${resultChanged}</strong></span>
+      ${onlyInA ? `<span class="master-chip">Only in A <strong>${onlyInA}</strong></span>` : ''}
+      ${onlyInB ? `<span class="master-chip">Only in B <strong>${onlyInB}</strong></span>` : ''}
+    </div>`;
+
+  const tableRows = rows.map(row => {
+    const subjectCells = row.subjects.map(sub => {
+      const aTxt = sub.a ? (sub.a.grade === 'AB' ? 'AB' : sub.a.marks) : '—';
+      const bTxt = sub.b ? (sub.b.grade === 'AB' ? 'AB' : sub.b.marks) : '—';
+      const deltaTxt = sub.delta === null ? '' : (sub.delta > 0 ? ` (+${sub.delta})` : sub.delta < 0 ? ` (${sub.delta})` : ' (=)');
+      const color = sub.delta > 0 ? 'var(--green,#1a7f37)' : sub.delta < 0 ? 'var(--red,#c0392b)' : 'inherit';
+      return `<div title="${escapeAttr(sub.name)} (${escapeAttr(sub.code)})" style="white-space:nowrap;color:${color}">${escapeHtml(sub.code)}: ${escapeHtml(String(aTxt))}→${escapeHtml(String(bTxt))}${deltaTxt}</div>`;
+    }).join('');
+    const totalDeltaTxt = row.totalDelta === null ? '—' : (row.totalDelta > 0 ? `+${row.totalDelta}` : row.totalDelta);
+    const totalColor = row.totalDelta > 0 ? 'var(--green,#1a7f37)' : row.totalDelta < 0 ? 'var(--red,#c0392b)' : 'inherit';
+    const resultChangedFlag = row.inA && row.inB && row.resultA !== row.resultB;
+    return `<tr>
+      <td>${escapeHtml(row.rollNo)}</td>
+      <td>${escapeHtml(row.name)}</td>
+      <td style="${resultChangedFlag ? 'font-weight:700' : ''}">${escapeHtml(row.resultA)} → ${escapeHtml(row.resultB)}</td>
+      <td>${subjectCells || '—'}</td>
+      <td style="color:${totalColor};font-weight:700">${row.totalA ?? '—'} → ${row.totalB ?? '—'} (${totalDeltaTxt})</td>
+    </tr>`;
+  }).join('');
+
+  resultsEl.innerHTML = `
+    ${summaryHtml}
+    <div style="font-size:12px;color:var(--muted,#888);margin-bottom:8px;">
+      <strong>A:</strong> ${escapeHtml(labelA)} &nbsp;&middot;&nbsp; <strong>B:</strong> ${escapeHtml(labelB)}
+    </div>
+    <div class="tbl-wrap" style="max-height:420px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Roll No</th>
+            <th>Name</th>
+            <th>Result (A → B)</th>
+            <th>Subjects (A→B)</th>
+            <th>Total (A→B)</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
 }

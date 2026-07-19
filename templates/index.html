@@ -91,6 +91,19 @@
       <div class="upload-status" id="status-XII"></div>
     </div>
   </div>
+  <div class="exam-label-row" style="max-width:520px;margin:0 auto 18px;text-align:left">
+    <label for="exam-label-input" style="font-size:12px;font-weight:700;color:var(--muted,#888);display:block;margin-bottom:4px">
+      Exam attempt label <span style="font-weight:400">(e.g. Main, Exam 2, Supplementary — used to keep multiple board exams for the same school/year separate)</span>
+    </label>
+    <input type="text" id="exam-label-input" class="followup-input" style="width:100%" list="exam-label-suggestions" value="Main" placeholder="Main">
+    <datalist id="exam-label-suggestions">
+      <option value="Main">
+      <option value="Exam 1">
+      <option value="Exam 2">
+      <option value="Supplementary">
+    </datalist>
+    <div id="exam-label-dates" style="font-size:11px;color:var(--muted,#888);margin-top:4px"></div>
+  </div>
   <div class="upload-actions">
     <button class="btn-analyze" id="btn-analyze" onclick="runAnalysis()" disabled>Analyse Results</button>
     <button class="btn-clear upload-cancel" id="btn-upload-cancel" onclick="hideUploadScreen()" style="display:none">Cancel</button>
@@ -128,6 +141,7 @@
         </div>
         <button class="btn-restore-json workspace-btn premium-performance-marks" onclick="document.getElementById('performance-marks-input').click()" style="display:inline-block">Upload Internal / Practical Marks</button>
         <button class="btn-export workspace-btn" onclick="promptSaveCombination()" style="display:inline-block">Save Combination</button>
+        <button class="btn-restore-json workspace-btn" onclick="openExamCompareModal()" style="display:inline-block">Compare Exam Attempts</button>
         <div class="template-links">
           <a class="template-link premium-student-master" href="student_master_template.xlsx" download>Student Master Excel Example</a>
           <a class="template-link premium-teacher-mapping" href="teacher_mapping_template.xlsx" download>Teacher Mapping Excel Example</a>
@@ -325,6 +339,39 @@
     <div class="modal-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
       <button class="btn-restore-json" onclick="closePasswordModal()">Cancel</button>
       <button class="btn-export" style="display:block;" onclick="saveNewPassword()">Update Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Exam Attempt Comparison Modal -->
+<div id="exam-compare-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:1100px; width:95vw;">
+    <h2>Compare Exam Attempts</h2>
+    <p>Compare the same students across two exam attempts of the same school, year and class (e.g. Exam 1 vs Exam 2, or Main vs Supplementary).</p>
+    <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:12px;">
+      <div class="form-field">
+        <label for="ec-class">Class</label>
+        <select id="ec-class" class="workspace-select" style="width:100%; min-height:38px; border-radius:10px; padding:4px 8px;" onchange="refreshExamCompareOptions()">
+          <option value="X">Class X</option>
+          <option value="XII">Class XII</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="ec-session-a">Attempt A</label>
+        <select id="ec-session-a" class="workspace-select" style="width:100%; min-height:38px; border-radius:10px; padding:4px 8px;"></select>
+      </div>
+      <div class="form-field">
+        <label for="ec-session-b">Attempt B</label>
+        <select id="ec-session-b" class="workspace-select" style="width:100%; min-height:38px; border-radius:10px; padding:4px 8px;"></select>
+      </div>
+      <div class="form-field" style="display:flex; align-items:flex-end;">
+        <button class="btn-export" style="display:block; width:100%; border-radius:10px; padding:10px;" onclick="renderExamComparison()">Compare</button>
+      </div>
+    </div>
+    <div id="exam-compare-error" class="login-error" style="color:var(--red); font-size:12px; margin-top:8px;"></div>
+    <div id="exam-compare-results" style="margin-top:16px;"></div>
+    <div class="modal-actions" style="margin-top:20px; display:flex; justify-content:flex-end;">
+      <button class="btn-clear" style="display:block;" onclick="closeExamCompareModal()">Close</button>
     </div>
   </div>
 </div>

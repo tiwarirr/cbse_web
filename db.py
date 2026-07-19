@@ -38,9 +38,11 @@ def init_db():
             school_name TEXT,
             year        TEXT    NOT NULL,
             cls         TEXT    NOT NULL CHECK(cls IN ('X','XII')),
+            exam_label  TEXT    NOT NULL DEFAULT 'Main',
+            exam_date   TEXT,
             raw_text    TEXT    NOT NULL,
             saved_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(school_code, year, cls)
+            UNIQUE(school_code, year, cls, exam_label)
         );
 
         CREATE TABLE IF NOT EXISTS student_master (
@@ -184,6 +186,19 @@ def _migrate_users_table(conn):
 
 
 def _migrate_sessions_table(conn, default_owner_id, default_owner_username):
+    cols = _columns(conn, 'sessions')
+    unique_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'"
+    ).fetchone()['sql']
+    needs_rebuild = (
+        'owner_user_id' not in cols or
+        'exam_label' not in cols or
+        'exam_date' not in cols or
+        'UNIQUE(owner_user_id, school_code, year, cls, exam_label)' not in unique_sql
+    )
+    if not needs_rebuild:
+        return
+
     conn.executescript('''
         CREATE TABLE sessions_new (
             id             INTEGER PRIMARY KEY,
@@ -191,21 +206,27 @@ def _migrate_sessions_table(conn, default_owner_id, default_owner_username):
             school_name    TEXT,
             year           TEXT    NOT NULL,
             cls            TEXT    NOT NULL CHECK(cls IN ('X','XII')),
+            exam_label     TEXT    NOT NULL DEFAULT 'Main',
+            exam_date      TEXT,
             raw_text       TEXT    NOT NULL,
             owner_user_id  INTEGER NOT NULL,
             owner_username TEXT    NOT NULL,
             saved_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(owner_user_id, school_code, year, cls)
+            UNIQUE(owner_user_id, school_code, year, cls, exam_label)
         );
     ''')
-    cols = _columns(conn, 'sessions')
     owner_id_expr = 'owner_user_id' if 'owner_user_id' in cols else str(default_owner_id)
     owner_name_expr = 'owner_username' if 'owner_username' in cols else f"'{default_owner_username}'"
     saved_expr = 'saved_at' if 'saved_at' in cols else 'CURRENT_TIMESTAMP'
+    exam_label_expr = 'exam_label' if 'exam_label' in cols else "'Main'"
+    exam_date_expr = 'exam_date' if 'exam_date' in cols else 'NULL'
     conn.execute(f'''
         INSERT OR IGNORE INTO sessions_new
-            (id, school_code, school_name, year, cls, raw_text, owner_user_id, owner_username, saved_at)
-        SELECT id, school_code, school_name, year, cls, raw_text,
+            (id, school_code, school_name, year, cls, exam_label, exam_date, raw_text, owner_user_id, owner_username, saved_at)
+        SELECT id, school_code, school_name, year, cls,
+               COALESCE({exam_label_expr}, 'Main'),
+               {exam_date_expr},
+               raw_text,
                COALESCE({owner_id_expr}, ?),
                COALESCE({owner_name_expr}, ?),
                {saved_expr}
@@ -338,17 +359,18 @@ def _migrate_combinations_table(conn, default_owner_id):
 
 # ── Sessions ──────────────────────────────────────────────────
 
-def save_session(school_code, school_name, year, cls, raw_text, owner_user_id, owner_username):
+def save_session(school_code, school_name, year, cls, raw_text, owner_user_id, owner_username, exam_label='Main', exam_date=None):
     conn = get_db()
     conn.execute('''
-        INSERT INTO sessions (school_code, school_name, year, cls, raw_text, owner_user_id, owner_username)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(owner_user_id, school_code, year, cls) DO UPDATE SET
+        INSERT INTO sessions (school_code, school_name, year, cls, exam_label, exam_date, raw_text, owner_user_id, owner_username)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_user_id, school_code, year, cls, exam_label) DO UPDATE SET
             raw_text   = excluded.raw_text,
+            exam_date  = excluded.exam_date,
             school_name = COALESCE(excluded.school_name, school_name),
             owner_username = excluded.owner_username,
             saved_at   = CURRENT_TIMESTAMP
-    ''', (school_code, school_name, year, cls, raw_text, owner_user_id, owner_username))
+    ''', (school_code, school_name, year, cls, exam_label, exam_date, raw_text, owner_user_id, owner_username))
     conn.commit()
     conn.close()
 
@@ -357,13 +379,13 @@ def list_sessions(user=None):
     conn = get_db()
     if user and user.get('role') != 'admin':
         rows = conn.execute(
-            'SELECT school_code, school_name, year, cls, raw_text, owner_user_id, owner_username '
+            'SELECT school_code, school_name, year, cls, exam_label, exam_date, raw_text, owner_user_id, owner_username '
             'FROM sessions WHERE owner_user_id=? ORDER BY year DESC, school_code',
             (user['id'],)
         ).fetchall()
     else:
         rows = conn.execute(
-            'SELECT school_code, school_name, year, cls, raw_text, owner_user_id, owner_username '
+            'SELECT school_code, school_name, year, cls, exam_label, exam_date, raw_text, owner_user_id, owner_username '
             'FROM sessions ORDER BY year DESC, school_code, owner_username'
         ).fetchall()
     conn.close()
@@ -374,29 +396,53 @@ def get_session(school_code, year, user=None, owner_user_id=None):
     conn = get_db()
     if owner_user_id:
         rows = conn.execute(
-            'SELECT cls, raw_text, school_name, owner_user_id, owner_username '
+            'SELECT cls, exam_label, exam_date, raw_text, school_name, owner_user_id, owner_username '
             'FROM sessions WHERE school_code=? AND year=? AND owner_user_id=?',
             (school_code, year, owner_user_id)
         ).fetchall()
     elif user and user.get('role') != 'admin':
         rows = conn.execute(
-            'SELECT cls, raw_text, school_name, owner_user_id, owner_username '
+            'SELECT cls, exam_label, exam_date, raw_text, school_name, owner_user_id, owner_username '
             'FROM sessions WHERE school_code=? AND year=? AND owner_user_id=?',
             (school_code, year, user['id'])
         ).fetchall()
     else:
         rows = conn.execute(
-            'SELECT cls, raw_text, school_name, owner_user_id, owner_username FROM sessions WHERE school_code=? AND year=?',
+            'SELECT cls, exam_label, exam_date, raw_text, school_name, owner_user_id, owner_username '
+            'FROM sessions WHERE school_code=? AND year=?',
             (school_code, year)
         ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def delete_session(school_code, year, user=None):
+def delete_session_attempt(school_code, year, cls, exam_label, user=None):
+    """Remove a single exam attempt's session row without touching master data or other attempts."""
     conn = get_db()
     if user and user.get('role') != 'admin':
-        params = (school_code, year, user['id'])
+        conn.execute(
+            'DELETE FROM sessions WHERE school_code=? AND year=? AND cls=? AND exam_label=? AND owner_user_id=?',
+            (school_code, year, cls, exam_label, user['id'])
+        )
+    else:
+        conn.execute(
+            'DELETE FROM sessions WHERE school_code=? AND year=? AND cls=? AND exam_label=?',
+            (school_code, year, cls, exam_label)
+        )
+    conn.commit()
+    conn.close()
+
+
+def delete_session(school_code, year, user=None, owner_user_id=None):
+    """Wipe a school/year's sessions + master data. Scoped to owner_user_id when given
+    (or to the current user, for non-admins) — otherwise admins wipe every owner's copy."""
+    conn = get_db()
+    target_owner = owner_user_id
+    if not target_owner and user and user.get('role') != 'admin':
+        target_owner = user['id']
+
+    if target_owner:
+        params = (school_code, year, target_owner)
         conn.execute('DELETE FROM sessions WHERE school_code=? AND year=? AND owner_user_id=?', params)
         conn.execute('DELETE FROM student_master WHERE school_code=? AND year=? AND owner_user_id=?', params)
         conn.execute('DELETE FROM teacher_mapping WHERE school_code=? AND year=? AND owner_user_id=?', params)
@@ -449,9 +495,12 @@ def uploaded_class_count(user_id, school_code, year):
 
 
 def result_file_count(user_id):
+    """Count distinct (school, year, class) datasets — additional exam attempts for an
+    already-uploaded class don't consume a regular user's upload quota."""
     conn = get_db()
     row = conn.execute(
-        'SELECT COUNT(*) AS count FROM sessions WHERE owner_user_id=?',
+        'SELECT COUNT(DISTINCT school_code || "|" || year || "|" || cls) AS count '
+        'FROM sessions WHERE owner_user_id=?',
         (user_id,)
     ).fetchone()
     conn.close()

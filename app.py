@@ -270,6 +270,8 @@ def api_list_sessions():
             'schoolName': s['school_name'] or '',
             'year':       s['year'],
             'cls':        s['cls'],
+            'examLabel':  s.get('exam_label') or 'Main',
+            'examDate':   s.get('exam_date') or '',
             'rawText':    s['raw_text'],
             'ownerUserId': s.get('owner_user_id'),
             'ownerUsername': s.get('owner_username') or '',
@@ -281,7 +283,7 @@ def api_list_sessions():
 @app.route('/api/sessions', methods=['POST'])
 @login_required
 def api_save_session():
-    """Save raw gazette text for one class of one school/year."""
+    """Save raw gazette text for one exam attempt of one class of one school/year."""
     data = request.get_json(force=True)
     required = ('schoolCode', 'year', 'cls', 'rawText')
     if not all(data.get(k) for k in required):
@@ -302,6 +304,8 @@ def api_save_session():
         raw_text    = data['rawText'],
         owner_user_id = user['id'],
         owner_username = user['username'],
+        exam_label  = (data.get('examLabel') or 'Main').strip() or 'Main',
+        exam_date   = data.get('examDate') or None,
     )
     return jsonify({'status': 'saved'})
 
@@ -315,10 +319,12 @@ def api_get_session(school_code, year):
     rows = db.get_session(school_code, year, current_user(), requested_owner_id())
     if not rows:
         abort(404)
-    # Shape: [{cls, rawText, schoolName}]
+    # Shape: [{cls, examLabel, rawText, schoolName}]
     return jsonify([
         {
             'cls': r['cls'],
+            'examLabel': r.get('exam_label') or 'Main',
+            'examDate': r.get('exam_date') or '',
             'rawText': r['raw_text'],
             'schoolName': r.get('school_name', ''),
             'ownerUserId': r.get('owner_user_id'),
@@ -333,7 +339,22 @@ def api_get_session(school_code, year):
 def api_delete_session(school_code, year):
     if not ensure_resource_access(school_code, year):
         return jsonify({'error': 'Forbidden'}), 403
-    db.delete_session(school_code, year, current_user())
+    db.delete_session(school_code, year, current_user(), owner_user_id=requested_owner_id())
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/sessions/<school_code>/<year>/attempt', methods=['DELETE'])
+@login_required
+def api_delete_session_attempt(school_code, year):
+    """Remove a single exam attempt (e.g. just 'Exam 2') without touching master data or other attempts."""
+    if not ensure_resource_access(school_code, year):
+        return jsonify({'error': 'Forbidden'}), 403
+    data = request.get_json(force=True) or {}
+    cls = data.get('cls')
+    exam_label = data.get('examLabel')
+    if cls not in ('X', 'XII') or not exam_label:
+        return jsonify({'error': 'cls and examLabel are required'}), 400
+    db.delete_session_attempt(school_code, year, cls, exam_label, current_user())
     return jsonify({'status': 'deleted'})
 
 
