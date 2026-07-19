@@ -39,11 +39,13 @@ body {
 header {
   background:var(--ink);
   color:#fff;
-  padding:0 32px;
+  padding:12px 32px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  height:68px;
+  flex-wrap:wrap;
+  gap:10px;
+  min-height:68px;
   position:sticky;
   top:0;
   z-index:100;
@@ -57,7 +59,9 @@ header {
 }
 
 .hbrand { gap:14px; }
-.hright { gap:18px; }
+.hright { gap:18px; flex-wrap:wrap; row-gap:8px; justify-content:flex-end; }
+
+#hmeta { flex-shrink:0; }
 
 .hlogo {
   width:42px;

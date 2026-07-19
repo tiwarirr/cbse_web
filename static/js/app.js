@@ -93,6 +93,7 @@ const uploadRaw = {X:null, XII:null};
 const schoolSessions = {};
 let savedCombinations = [];
 let currentCombinedMerit = null;
+let currentExamComparison = null;
 
 let charts = {};
 let activeCls = null;
@@ -641,12 +642,16 @@ function renderActiveWorkspaceHeader(){
   if(isMultiMode()){
     const schoolCount = sessions.length;
     const years = [...new Set(sessions.map(session => session.year).filter(Boolean))];
+    const examLabels = [...new Set(sessions.map(session => normalizeExamLabel(session.examLabel)))];
+    let examNote = '';
+    if(examLabels.length > 1) examNote = ' &nbsp;&middot;&nbsp; Mixed exam attempts';
+    else if(examLabels[0] && examLabels[0] !== DEFAULT_EXAM_LABEL) examNote = ` &nbsp;&middot;&nbsp; ${escapeHtml(examLabels[0])}`;
     document.getElementById('hschool').textContent = 'Multi-School Workspace';
     document.getElementById('hmeta').innerHTML =
       `${schoolCount} school${schoolCount > 1 ? 's' : ''} selected` +
       `<br><span style="opacity:.6">${workspaceState.classScope === 'all' ? 'All classes' : `Class ${workspaceState.classScope}`} &nbsp;&middot;&nbsp; ` +
       `${workspaceState.comparisonYear === 'all' ? 'All years' : workspaceState.comparisonYear}` +
-      `${years.length > 1 ? ' &nbsp;&middot;&nbsp; Mixed years' : ''}</span>`;
+      `${years.length > 1 ? ' &nbsp;&middot;&nbsp; Mixed years' : ''}${examNote}</span>`;
     return;
   }
 
@@ -658,10 +663,14 @@ function renderActiveWorkspaceHeader(){
   }
 
   document.getElementById('hschool').textContent = getSessionLabel(session);
+  const examLabel = normalizeExamLabel(session.examLabel);
+  const examBadge = examLabel !== DEFAULT_EXAM_LABEL
+    ? ` <span style="display:inline-block;margin-left:4px;padding:2px 9px;border-radius:20px;background:#eef2ff;color:#4f46e5;font-size:10px;font-weight:800;letter-spacing:.03em;vertical-align:middle;">${escapeHtml(examLabel).toUpperCase()}</span>`
+    : '';
   document.getElementById('hmeta').innerHTML =
     [DB.X.length ? `Class X: <strong style="color:var(--gold)">${DB.X.length}</strong>` : '',
      DB.XII.length ? `Class XII: <strong style="color:#22d3ee">${DB.XII.length}</strong>` : '']
-      .filter(Boolean).join(' &nbsp;&middot;&nbsp; ') +
+      .filter(Boolean).join(' &nbsp;&middot;&nbsp; ') + examBadge +
     `<br><span style="opacity:.6">CBSE ${session.year}` +
     (session.schoolCode ? ` &nbsp;&middot;&nbsp; School ${session.schoolCode}` : '') + `</span>`;
 }
@@ -2576,10 +2585,15 @@ function stripe(cls, students){
   const meta = parseMeta(raw[cls]||'');
   const exam = cls==='X'?'All India Secondary School Examination':'Senior School Certificate Examination';
   const detail = [meta.code?`School ${meta.code}`:'', meta.school||'', meta.region?`Region: ${meta.region}`:''].filter(Boolean).join(' · ');
+  const session = (!isMultiMode() && activeSessionId) ? schoolSessions[activeSessionId] : null;
+  const examLabel = session ? normalizeExamLabel(session.examLabel) : null;
+  const examBadge = examLabel && examLabel !== DEFAULT_EXAM_LABEL
+    ? `<span style="display:inline-block;margin-left:8px;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.3);color:#fff;font-size:10px;font-weight:800;letter-spacing:.03em;vertical-align:middle;">${escapeHtml(examLabel).toUpperCase()}${meta.date ? ' · ' + escapeHtml(meta.date) : ''}</span>`
+    : '';
   return `<div class="cls-stripe s${cls}">
     <div class="cs-class">${cls}</div>
     <div class="cs-info">
-      <div class="cs-exam">CBSE ${meta.year}</div>
+      <div class="cs-exam">CBSE ${meta.year}${examBadge}</div>
       <div class="cs-name">${exam}</div>
       <div class="cs-detail">${detail}</div>
     </div>
@@ -5412,6 +5426,40 @@ function subjectTotal(student){
   return (student?.subjects || []).reduce((sum, sub) => sum + (typeof sub.marks === 'number' ? sub.marks : 0), 0);
 }
 
+function computeExamAggregateStats(students){
+  const stats = st(students);
+  const fail = stats.n - stats.pass - stats.comp - stats.abst;
+  const avgTotal = avg(students.filter(s => s.result === 'PASS').map(tm));
+  return {n: stats.n, pass: stats.pass, comp: stats.comp, abst: stats.abst, fail, pct: Number(stats.pct), avgTotal: Number(avgTotal.toFixed(1))};
+}
+
+function computeExamSubjectAverages(studentsA, studentsB){
+  const byCode = new Map();
+  const collect = (students, side) => {
+    students.forEach(student => student.subjects.forEach(sub => {
+      if(!byCode.has(sub.code)) byCode.set(sub.code, {code: sub.code, name: sub.name, marksA: [], marksB: [], passA: 0, totalA: 0, passB: 0, totalB: 0});
+      const entry = byCode.get(sub.code);
+      if(sub.grade !== 'AB') entry[side === 'A' ? 'marksA' : 'marksB'].push(sub.marks);
+      entry[side === 'A' ? 'totalA' : 'totalB']++;
+      if(!subjectIsFail(sub) && !subjectIsAbsent(sub)) entry[side === 'A' ? 'passA' : 'passB']++;
+    }));
+  };
+  collect(studentsA, 'A');
+  collect(studentsB, 'B');
+  return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)).map(entry => {
+    const avgA = entry.marksA.length ? avg(entry.marksA) : null;
+    const avgB = entry.marksB.length ? avg(entry.marksB) : null;
+    return {
+      code: entry.code, name: entry.name,
+      avgA: avgA !== null ? Number(avgA.toFixed(1)) : null,
+      avgB: avgB !== null ? Number(avgB.toFixed(1)) : null,
+      delta: (avgA !== null && avgB !== null) ? Number((avgB - avgA).toFixed(1)) : null,
+      passPctA: entry.totalA ? Number(((entry.passA / entry.totalA) * 100).toFixed(1)) : null,
+      passPctB: entry.totalB ? Number(((entry.passB / entry.totalB) * 100).toFixed(1)) : null,
+    };
+  });
+}
+
 function computeExamComparisonRows(studentsA, studentsB){
   const mapA = new Map(studentsA.map(s => [s.rollNo, s]));
   const mapB = new Map(studentsB.map(s => [s.rollNo, s]));
@@ -5467,26 +5515,95 @@ function renderExamComparison(){
   }
   errEl.textContent = '';
 
-  const rows = computeExamComparisonRows(sessionA.classes[cls].students, sessionB.classes[cls].students);
+  const studentsA = sessionA.classes[cls].students;
+  const studentsB = sessionB.classes[cls].students;
+  const rows = computeExamComparisonRows(studentsA, studentsB);
   const labelA = examCompareOptionLabel(sessionA, cls);
   const labelB = examCompareOptionLabel(sessionB, cls);
+  const statsA = computeExamAggregateStats(studentsA);
+  const statsB = computeExamAggregateStats(studentsB);
+  const subjectAverages = computeExamSubjectAverages(studentsA, studentsB);
 
   const improved = rows.filter(r => r.totalDelta !== null && r.totalDelta > 0).length;
   const declined = rows.filter(r => r.totalDelta !== null && r.totalDelta < 0).length;
   const unchanged = rows.filter(r => r.totalDelta === 0).length;
   const onlyInA = rows.filter(r => r.inA && !r.inB).length;
   const onlyInB = rows.filter(r => !r.inA && r.inB).length;
-  const resultChanged = rows.filter(r => r.inA && r.inB && r.resultA !== r.resultB).length;
+  const changeRows = rows.filter(r => (r.inA && r.inB && r.resultA !== r.resultB) || !r.inA || !r.inB);
+
+  currentExamComparison = {cls, sessionA, sessionB, labelA, labelB, statsA, statsB, subjectAverages, rows, changeRows};
 
   const summaryHtml = `
     <div class="master-status" style="margin-bottom:12px;">
       <span class="master-chip">Improved <strong>${improved}</strong></span>
       <span class="master-chip">Declined <strong>${declined}</strong></span>
       <span class="master-chip">Unchanged total <strong>${unchanged}</strong></span>
-      <span class="master-chip">Result status changed <strong>${resultChanged}</strong></span>
+      <span class="master-chip">Result status changed <strong>${changeRows.filter(r=>r.inA&&r.inB).length}</strong></span>
       ${onlyInA ? `<span class="master-chip">Only in A <strong>${onlyInA}</strong></span>` : ''}
       ${onlyInB ? `<span class="master-chip">Only in B <strong>${onlyInB}</strong></span>` : ''}
     </div>`;
+
+  const statRow = (label, a, b, fmt = (v => v)) => {
+    const delta = (typeof a === 'number' && typeof b === 'number') ? Number((b - a).toFixed(2)) : null;
+    const color = delta > 0 ? 'var(--green,#1a7f37)' : delta < 0 ? 'var(--red,#c0392b)' : 'inherit';
+    const deltaTxt = delta === null ? '' : (delta > 0 ? ` (+${delta})` : delta < 0 ? ` (${delta})` : ' (=)');
+    return `<tr><td>${label}</td><td>${fmt(a)}</td><td>${fmt(b)}</td><td style="color:${color};font-weight:700">${fmt(b)}${deltaTxt}</td></tr>`;
+  };
+  const summaryStatsHtml = `
+    <h3 style="margin:16px 0 8px;font-size:14px;">Summary Comparison</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>A</th><th>B</th><th>B vs A</th></tr></thead>
+        <tbody>
+          ${statRow('Students', statsA.n, statsB.n)}
+          ${statRow('Pass', statsA.pass, statsB.pass)}
+          ${statRow('Compartment', statsA.comp, statsB.comp)}
+          ${statRow('Absent', statsA.abst, statsB.abst)}
+          ${statRow('Fail', statsA.fail, statsB.fail)}
+          ${statRow('Pass %', statsA.pct, statsB.pct, v => `${v}%`)}
+          ${statRow('Average Total (pass students)', statsA.avgTotal, statsB.avgTotal)}
+        </tbody>
+      </table>
+    </div>`;
+
+  const subjectAvgHtml = `
+    <h3 style="margin:16px 0 8px;font-size:14px;">Subject-wise Averages</h3>
+    <div class="tbl-wrap" style="max-height:260px;overflow:auto;">
+      <table>
+        <thead><tr><th>Subject</th><th>Code</th><th>Avg A</th><th>Avg B</th><th>Δ</th><th>Pass % A</th><th>Pass % B</th></tr></thead>
+        <tbody>${subjectAverages.map(sub => {
+          const color = sub.delta > 0 ? 'var(--green,#1a7f37)' : sub.delta < 0 ? 'var(--red,#c0392b)' : 'inherit';
+          return `<tr>
+            <td>${escapeHtml(sub.name)}</td>
+            <td>${escapeHtml(sub.code)}</td>
+            <td>${sub.avgA ?? '—'}</td>
+            <td>${sub.avgB ?? '—'}</td>
+            <td style="color:${color};font-weight:700">${sub.delta === null ? '—' : (sub.delta > 0 ? `+${sub.delta}` : sub.delta)}</td>
+            <td>${sub.passPctA ?? '—'}${sub.passPctA !== null ? '%' : ''}</td>
+            <td>${sub.passPctB ?? '—'}${sub.passPctB !== null ? '%' : ''}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+
+  const changeReportHtml = `
+    <h3 style="margin:16px 0 8px;font-size:14px;">Change Report <span style="font-weight:400;font-size:12px;color:var(--muted,#888)">(result status changed, or only appears in one attempt)</span></h3>
+    ${changeRows.length ? `<div class="tbl-wrap" style="max-height:260px;overflow:auto;">
+      <table>
+        <thead><tr><th>Roll No</th><th>Name</th><th>Change</th><th>Result (A → B)</th><th>Total (A→B)</th></tr></thead>
+        <tbody>${changeRows.map(row => {
+          const changeType = !row.inA ? 'New in B' : !row.inB ? 'Missing in B' : 'Result changed';
+          const totalDeltaTxt = row.totalDelta === null ? '—' : (row.totalDelta > 0 ? `+${row.totalDelta}` : row.totalDelta);
+          return `<tr>
+            <td>${escapeHtml(row.rollNo)}</td>
+            <td>${escapeHtml(row.name)}</td>
+            <td>${changeType}</td>
+            <td style="font-weight:700">${escapeHtml(row.resultA)} → ${escapeHtml(row.resultB)}</td>
+            <td>${row.totalA ?? '—'} → ${row.totalB ?? '—'} (${totalDeltaTxt})</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>` : '<div class="workspace-empty">No status changes between these two attempts.</div>'}`;
 
   const tableRows = rows.map(row => {
     const subjectCells = row.subjects.map(sub => {
@@ -5513,6 +5630,11 @@ function renderExamComparison(){
     <div style="font-size:12px;color:var(--muted,#888);margin-bottom:8px;">
       <strong>A:</strong> ${escapeHtml(labelA)} &nbsp;&middot;&nbsp; <strong>B:</strong> ${escapeHtml(labelB)}
     </div>
+    <button class="btn-export" style="display:inline-block;margin-bottom:8px;" onclick="exportExamComparison()">Export to Excel</button>
+    ${summaryStatsHtml}
+    ${subjectAvgHtml}
+    ${changeReportHtml}
+    <h3 style="margin:16px 0 8px;font-size:14px;">Student-wise Comparison</h3>
     <div class="tbl-wrap" style="max-height:420px;overflow:auto;">
       <table>
         <thead>
@@ -5527,4 +5649,75 @@ function renderExamComparison(){
         <tbody>${tableRows}</tbody>
       </table>
     </div>`;
+}
+
+function exportExamComparison(){
+  if(!window.XLSX){
+    alert('Excel library not loaded yet - please wait a moment and try again.');
+    return;
+  }
+  if(!currentExamComparison){
+    alert('Run a comparison first.');
+    return;
+  }
+  const {cls, labelA, labelB, statsA, statsB, subjectAverages, rows, changeRows} = currentExamComparison;
+
+  const wb = XLSX.utils.book_new();
+
+  const summarySheetRows = [
+    ['Attempt A', labelA],
+    ['Attempt B', labelB],
+    [],
+    ['Metric', 'A', 'B'],
+    ['Students', statsA.n, statsB.n],
+    ['Pass', statsA.pass, statsB.pass],
+    ['Compartment', statsA.comp, statsB.comp],
+    ['Absent', statsA.abst, statsB.abst],
+    ['Fail', statsA.fail, statsB.fail],
+    ['Pass %', statsA.pct, statsB.pct],
+    ['Average Total (pass students)', statsA.avgTotal, statsB.avgTotal],
+  ];
+  const summarySheet = XLSX.utils.aoa_to_sheet(summarySheetRows);
+  summarySheet['!cols'] = [{wch:28}, {wch:20}, {wch:20}];
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+  const subjectRows = [['Subject', 'Code', 'Avg A', 'Avg B', 'Delta', 'Pass % A', 'Pass % B']];
+  subjectAverages.forEach(sub => subjectRows.push([sub.name, sub.code, sub.avgA, sub.avgB, sub.delta, sub.passPctA, sub.passPctB]));
+  const subjectSheet = XLSX.utils.aoa_to_sheet(subjectRows);
+  subjectSheet['!cols'] = [{wch:28}, {wch:8}, {wch:10}, {wch:10}, {wch:10}, {wch:10}, {wch:10}];
+  XLSX.utils.book_append_sheet(wb, subjectSheet, 'Subject Averages');
+
+  const changeSheetRows = [['Roll No', 'Name', 'Change', 'Result A', 'Result B', 'Total A', 'Total B', 'Total Delta']];
+  changeRows.forEach(row => {
+    const changeType = !row.inA ? 'New in B' : !row.inB ? 'Missing in B' : 'Result changed';
+    changeSheetRows.push([row.rollNo, row.name, changeType, row.resultA, row.resultB, row.totalA, row.totalB, row.totalDelta]);
+  });
+  const changeSheet = XLSX.utils.aoa_to_sheet(changeSheetRows);
+  changeSheet['!cols'] = [{wch:12}, {wch:26}, {wch:14}, {wch:10}, {wch:10}, {wch:10}, {wch:10}, {wch:10}];
+  XLSX.utils.book_append_sheet(wb, changeSheet, 'Change Report');
+
+  const maxSubjects = rows.reduce((max, row) => Math.max(max, row.subjects.length), 0);
+  const studentHeader = ['Roll No', 'Name', 'Result A', 'Result B', 'Total A', 'Total B', 'Total Delta'];
+  for(let i = 0; i < maxSubjects; i++){
+    studentHeader.push(`Subject ${i+1}`, `A`, `B`, `Delta`);
+  }
+  const studentRows = [studentHeader];
+  rows.forEach(row => {
+    const line = [row.rollNo, row.name, row.resultA, row.resultB, row.totalA, row.totalB, row.totalDelta];
+    row.subjects.forEach(sub => {
+      line.push(
+        `${sub.name} (${sub.code})`,
+        sub.a ? (sub.a.grade === 'AB' ? 'AB' : sub.a.marks) : '',
+        sub.b ? (sub.b.grade === 'AB' ? 'AB' : sub.b.marks) : '',
+        sub.delta ?? ''
+      );
+    });
+    studentRows.push(line);
+  });
+  const studentSheet = XLSX.utils.aoa_to_sheet(studentRows);
+  studentSheet['!cols'] = [{wch:12}, {wch:26}, {wch:10}, {wch:10}, {wch:10}, {wch:10}, {wch:10}];
+  XLSX.utils.book_append_sheet(wb, studentSheet, 'Student Comparison');
+
+  const schoolTag = (currentExamComparison.sessionA.schoolCode || 'CBSE').replace(/\s+/g, '_');
+  XLSX.writeFile(wb, `CBSE_ExamComparison_${schoolTag}_${cls}_${currentExamComparison.sessionA.year}.xlsx`);
 }
